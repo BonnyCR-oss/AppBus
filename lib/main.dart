@@ -1,124 +1,178 @@
 import 'package:flutter/material.dart';
+import 'screens/dashboard_screen.dart'; // Asegúrate de que esta ruta coincida con tu archivo
 
 void main() {
-  runApp(const MyApp());
+  runApp(const MiAppDeBuses());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MiAppDeBuses extends StatelessWidget {
+  const MiAppDeBuses({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Bus Claros - Gestión de Viajes',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF638541)),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'contador de flutter para test'),
+      home: const PantallaLogin(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// AHORA ES UN STATEFUL WIDGET: Esto nos permite manejar variables que cambian (como el texto)
+class PantallaLogin extends StatefulWidget {
+  const PantallaLogin({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<PantallaLogin> createState() => _PantallaLoginState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _PantallaLoginState extends State<PantallaLogin> {
+  // 1. Controladores: Estas variables son las "pinzas" que atrapan el texto
+  final TextEditingController _usuarioController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      //subir el contador de 2 en 2
-      // de 4 en 4
-      _counter+=4;
-    });
+  // 2. La función que simulará tu backend por ahora
+  void _iniciarSesion() {
+    // Obtenemos el texto exacto que escribió el usuario
+    String usuarioEscrito = _usuarioController.text;
+    String passwordEscrita = _passwordController.text;
+
+    // --- AQUÍ IRÁ TU CÓDIGO HTTP POST HACIA C# Y SQL SERVER ---
+    
+    // Por ahora, usamos un IF para simular que el servidor nos dio luz verde
+    if ((usuarioEscrito == 'Carlos' || usuarioEscrito == 'Ana') && passwordEscrita == '1234') {
+      // Todo es correcto -> Navegamos al Dashboard
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const PantallaDashboard()),
+      );
+    } else {
+      // Algo falló -> Mostramos un mensaje de error estilo "pop-up" abajo (SnackBar)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Usuario o contraseña incorrectos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // 3. Buenas prácticas: Liberar memoria cuando la pantalla se cierre
+  @override
+  void dispose() {
+    _usuarioController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+      backgroundColor: const Color(0xFF638541),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              
+              // --- SECCIÓN LOGO Y TÍTULO ---
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF95A781),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(Icons.directions_bus_filled_outlined, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 16),
+              const Text('Bus Claros', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+              const Text('Gestión de viajes', style: TextStyle(color: Colors.white, fontSize: 16)),
+              const SizedBox(height: 60),
+
+              // --- SECCIÓN TARJETA DEL FORMULARIO ---
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(32),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Iniciar sesión', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 24),
+
+                      // --- CAMPO USUARIO ---
+                      const Text('Usuario', style: TextStyle(fontSize: 16)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _usuarioController, // Vinculamos la "pinza" al campo
+                        decoration: InputDecoration(
+                          hintText: 'Carlos o Ana',
+                          filled: true,
+                          fillColor: const Color(0xFFEEF3E9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // --- CAMPO CONTRASEÑA ---
+                      const Text('Contraseña', style: TextStyle(fontSize: 16)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _passwordController, // Vinculamos la "pinza" al campo
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          hintText: '....',
+                          filled: true,
+                          fillColor: const Color(0xFFEEF3E9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // --- BOTÓN INGRESAR ---
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _iniciarSesion, // Ejecutamos la función de validación
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF638541),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: const Text('Ingresar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      Center(
+                        child: Text(
+                          'Demo: Carlos (chofer) - Ana (vendedora) - clave 1234',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
 }
+
