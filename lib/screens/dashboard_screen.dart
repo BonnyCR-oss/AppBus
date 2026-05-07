@@ -1,121 +1,266 @@
 import 'package:flutter/material.dart';
 
+// Definimos unos datos falsos (mock) para el chofer de ejemplo
+// En el futuro, estos vendrán de la base de datos Supabase
+const String _driverName = 'Carlos Pérez';
+const String _driverPhone = '+591 76543210';
+const Map<String, String> _driverDetails = {
+  'bloodGroup': 'O+',
+  'age': '35 años',
+  'birthDate': '12 de mayo, 1990',
+};
+
 class PantallaDashboard extends StatelessWidget {
   const PantallaDashboard({super.key});
 
- @override
+  // FUNCIÓN AUXILIAR: Muestra el diálogo detallado del chofer (Mini ventanita)
+  void _mostrarDetallesChofer(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          // Bordes redondeados profesionales
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min, // El diálogo se ajusta al contenido
+            children: [
+              // 1. Fotito del Chofer (Placeholder por ahora)
+              const CircleAvatar(
+                radius: 40,
+                backgroundColor: Color(0xFF638541),
+                child: Icon(Icons.person, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 16),
+              // 2. Nombre completo
+              const Text(
+                _driverName,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Chofer certificado',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+              const Divider(height: 32), // Línea divisoria
+
+              // 3. Datos detallados en formato clave-valor
+              _buildDialogInfoRow(Icons.phone, 'Teléfono', _driverPhone),
+              _buildDialogInfoRow(Icons.bloodtype_outlined, 'Sangre', _driverDetails['bloodGroup']!),
+              _buildDialogInfoRow(Icons.cake_outlined, 'Edad', _driverDetails['age']!),
+              _buildDialogInfoRow(Icons.calendar_month_outlined, 'Fecha Nac.', _driverDetails['birthDate']!),
+            ],
+          ),
+          // Botón para cerrar
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Fondo gris muy claro (F9FAF7) como el de tu diseño
+      // Fondo claro
       backgroundColor: const Color(0xFFF9FAF7),
       
-      // Barra superior verde
+      // BARRA SUPERIOR VERDE REDISEÑADA (AppBar profunda)
+      // BARRA SUPERIOR VERDE REDISEÑADA
       appBar: AppBar(
         backgroundColor: const Color(0xFF638541),
         elevation: 0,
-        title: const Text(
-          'BusControl',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        toolbarHeight: 90, 
+        
+        // 1. Alineamos el nombre y celular a la izquierda
+        centerTitle: false, 
+        
+        title: GestureDetector(
+          onTap: () => _mostrarDetallesChofer(context),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _driverName, 
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              Text(
+                _driverPhone, 
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ),
         ),
-        centerTitle: false,
+        
+        // 2. Colocamos el logo y los iconos en las 'actions' (A la derecha)
         actions: [
-          // Icono de estadísticas (el de las barritas de tu imagen)
+          // LOGO DEL BUS (Ahora a la derecha)
+          Center(
+            child: CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white24,
+              // Cuando tengas tu imagen real, cambiarás el Icon por:
+              // child: Image.asset('assets/images/mi_logo.png'),
+              child: const Icon(Icons.directions_bus, color: Colors.white, size: 28),
+            ),
+          ),
+          const SizedBox(width: 16), // Espacio entre el logo y los iconos
+          
+          // Icono de estadísticas
           IconButton(
             icon: const Icon(Icons.bar_chart, color: Colors.white),
             onPressed: () {},
           ),
-          // Perfil del usuario "Carlos Chofer"
-          const Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              backgroundColor: Colors.white24,
-              child: Icon(Icons.person, color: Colors.white),
-            ),
+          // Botón de salir (logout)
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () {
+              Navigator.pushReplacementNamed(context, '/'); 
+            },
           ),
+          const SizedBox(width: 8), // Margen final
         ],
       ),
 
-      body: Column(
-        children: [
-          // SECCIÓN DE RESUMEN (Viajes activos, Asientos, Recaudado)
-          Container(
-            color: const Color(0xFF638541),
-            padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatColumn('Viajes activos', '2'),
-                _buildStatColumn('Asientos vendidos', '8'),
-                _buildStatColumn('Recaudado hoy', '\$87'),
-              ],
-            ),
-          ),
-
-          // PESTAÑAS (Activos e Historial)
-          Container(
-            color: Colors.white,
-            child: Row(
-              children: [
-                _buildTab('Activos (2)', true),
-                _buildTab('Historial (2)', false),
-              ],
-            ),
-          ),
-
-          // LISTA DE VIAJES (Por ahora solo un mensaje central)
-          const Expanded(
-            child: Center(
-              child: Text(
-                'Aquí aparecerán las tarjetas de tus viajes',
-                style: TextStyle(color: Colors.grey),
+      // CUERPO CENTRAL DE LA PANTALLA (Donde van las B)
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0), // Espacio alrededor de los botones
+          child: Column(
+            children: [
+              // 1. BOTÓN PRINCIPAL 1: GESTIÓN DE RUTAS
+              _buildMenuActionButton(
+                context,
+                title: 'Gestión de Rutas',
+                subtitle: 'Iniciar nueva ruta / Ver historial',
+                icon: Icons.map,
+                color: const Color(0xFF638541),
+                onTap: () {
+                  // Navegar a la futura pantalla de Rutas
+                  debugPrint('Ir a Gestión de Rutas');
+                },
               ),
-            ),
+              const SizedBox(height: 24), // Espacio
+
+              // 2. BOTÓN PRINCIPAL 2: VENTA DE VIAJE ACTIVO
+              _buildMenuActionButton(
+                context,
+                title: 'Venta (Viaje Activo)',
+                subtitle: 'Ir a venta del viaje único activo',
+                icon: Icons.confirmation_number_outlined,
+                color: const Color(0xFFC0A261), // Color secundario distintivo
+                onTap: () {
+                  // Navegar a la venta del viaje activo
+                  debugPrint('Ir a Venta Activa');
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // 3. BOTÓN PRINCIPAL 3: ADMINISTRACIÓN (ROL DUEÑO)
+              _buildMenuActionButton(
+                context,
+                title: 'Administración',
+                subtitle: 'Control de usuarios y buses (Dueño)',
+                icon: Icons.admin_panel_settings_outlined,
+                color: Colors.blueGrey[600]!,
+                showLock: true, // Muestra el candadito
+                onTap: () {
+                  // Diálogo de aviso de ROL
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Acceso permitido solo para el Dueño')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // FUNCIÓN AUXILIAR: Construye los botones de acción del menú principal
+  Widget _buildMenuActionButton(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool showLock = false, // Muestra u oculta el candado
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        // Sombra suave profesional
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 5),
           ),
         ],
       ),
-
-      // BOTÓN FLOTANTE "NUEVO VIAJE"
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
-        backgroundColor: const Color(0xFF638541),
-        label: const Text('Nuevo viaje', style: TextStyle(color: Colors.white)),
-        icon: const Icon(Icons.add, color: Colors.white),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap, // Acción al tocar
+          borderRadius: BorderRadius.circular(20), // Efecto de onda redondeado
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Row(
+              children: [
+                // Icono grande en circulo
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: color.withAlpha(40),
+                  child: Icon(icon, color: color, size: 30),
+                ),
+                const SizedBox(width: 20),
+                // Textos
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                // Flechita de acción o candado
+                if (showLock)
+                  const Icon(Icons.lock_outline, color: Colors.blueGrey, size: 24)
+                else
+                  Icon(Icons.chevron_right, color: Colors.grey[400], size: 28),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // Función auxiliar para las columnas de estadísticas de arriba
-  Widget _buildStatColumn(String label, String value) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  // Función auxiliar para las pestañas
-  Widget _buildTab(String label, bool active) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: active ? const Color(0xFF638541) : Colors.transparent,
-              width: 3,
-            ),
-          ),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: active ? const Color(0xFF638541) : Colors.grey,
-            fontWeight: active ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
+  // FUNCIÓN AUXILIAR: Fila de información para el diálogo del chofer
+  Widget _buildDialogInfoRow(IconData icon, String key, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey[600], size: 20),
+          const SizedBox(width: 12),
+          Text('$key:', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+          const SizedBox(width: 8),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        ],
       ),
     );
   }
