@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'bus_photos_view.dart';
 import 'rutas_view.dart';
 import 'venta_view.dart';
-import 'admin_view.dart';
+import 'usuarios_list_view.dart';
 
 const Map<String, String> _driverDetails = {
-  'bloodGroup': 'O+',
-  'age': '35 años',
-  'birthDate': '12 de mayo, 1990',
+  'bloodGroup': '-',
+  'age': '--',
+  'birthDate': '--',
 };
 
 class DashboardView extends StatelessWidget {
@@ -46,7 +46,7 @@ class DashboardView extends StatelessWidget {
               Text(nombreUsuario,
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('Chofer certificado',
+              Text('vendedor certificado',
                   style: TextStyle(color: Colors.grey[600], fontSize: 14)),
               const Divider(height: 32),
               _buildDialogInfoRow(
@@ -154,7 +154,7 @@ class DashboardView extends StatelessWidget {
                     Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const AdminView()));
+                            builder: (_) => const UsuariosListView()));
                     return;
                   }
                   ScaffoldMessenger.of(context).showSnackBar(

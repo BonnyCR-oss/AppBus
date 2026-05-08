@@ -6,6 +6,10 @@ class UsuarioModel {
   final String email;
   final String password;
   final int fkRol;
+  
+  // nuevo: el estado y el nombre del rol para adm de users
+  final dynamic estadoBytea; 
+  final String nombreRol;
 
   const UsuarioModel({
     required this.id,
@@ -15,6 +19,8 @@ class UsuarioModel {
     required this.email,
     required this.password,
     required this.fkRol,
+    this.estadoBytea,
+    this.nombreRol = 'Sin Rol',
   });
 
   factory UsuarioModel.fromMap(Map<String, dynamic> map) {
@@ -26,6 +32,10 @@ class UsuarioModel {
       email: (map['email'] ?? '').toString().trim(),
       password: (map['password'] ?? '').toString(),
       fkRol: (map['fk_rol'] as num?)?.toInt() ?? 0,
+      // nuevo
+      estadoBytea: map['estado'], 
+      // nuevo: sacamos el nombre del rol
+      nombreRol: map['roles'] != null ? map['roles']['nombre']?.toString() ?? 'Sin Rol' : 'Sin Rol',
     );
   }
 
