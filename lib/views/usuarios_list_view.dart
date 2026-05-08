@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../controllers/usuarios_controller.dart';
 import '../models/usuario_model.dart';
+//pantalla nuevaa
 import 'usuario_form_view.dart'; 
 
 class UsuariosListView extends StatefulWidget {
