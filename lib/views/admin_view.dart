@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class PantallaRutas extends StatelessWidget {
-  const PantallaRutas({super.key});
+class AdminView extends StatelessWidget {
+  const AdminView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -10,9 +10,11 @@ class PantallaRutas extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF638541),
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Gestión de Rutas', style: TextStyle(color: Colors.white)),
+        title: const Text('Administración',
+            style: TextStyle(color: Colors.white)),
       ),
-      body: const Center(child: Text('Aquí se iniciarán rutas y se verá el historial')),
+      body: const Center(
+          child: Text('Control de usuarios y buses (Solo Dueños)')),
     );
   }
 }
