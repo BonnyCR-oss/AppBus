@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/dashboard_screen.dart'; // Asegúrate de que esta ruta coincida con tu archivo
 
-void main() {
+const String _supabaseUrl = 'https://ndxsenuscxmwpvjudzni.supabase.co';
+const String _supabaseAnonKey = 'sb_publishable_Yl-K7t4yc-Khy_nF_akqSw_5XjDifu9';
+
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  
+    await Supabase.initialize(
+      url: _supabaseUrl,
+     anonKey: _supabaseAnonKey,
+    );
+  
+
   runApp(const MiAppDeBuses());
 }
 
@@ -33,6 +47,8 @@ class _PantallaLoginState extends State<PantallaLogin> {
   // 1. Controladores: Estas variables son las "pinzas" que atrapan el texto
   final TextEditingController _usuarioController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  String _estadoConexion = 'Sin comprobar';
+  bool _probandoConexion = false;
 
   // 2. La función que simulará tu backend por ahora
   void _iniciarSesion() {
@@ -57,6 +73,29 @@ class _PantallaLoginState extends State<PantallaLogin> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _probarConexionSupabase() async {
+    setState(() {
+      _probandoConexion = true;
+      _estadoConexion = 'Probando...';
+    });
+
+    try {
+      // Usamos el cliente Supabase ya inicializado para comprobar la conexión
+      Supabase.instance.client.auth.currentSession;
+      setState(() {
+        _estadoConexion = '✓ Conexión exitosa con Supabase';
+      });
+    } catch (e) {
+      setState(() {
+        _estadoConexion = 'Error: $e';
+      });
+    } finally {
+      setState(() {
+        _probandoConexion = false;
+      });
     }
   }
 
@@ -155,6 +194,24 @@ class _PantallaLoginState extends State<PantallaLogin> {
                           ),
                           child: const Text('Ingresar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: _probandoConexion ? null : _probarConexionSupabase,
+                          child: Text(
+                            _probandoConexion
+                                ? 'Probando conexión...'
+                                : 'Probar conexión Supabase',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Estado Supabase: $_estadoConexion',
+                        style: const TextStyle(fontSize: 12),
                       ),
                       const SizedBox(height: 24),
                       
