@@ -54,7 +54,10 @@ class _LoginViewState extends State<LoginView> {
         _mostrarError('Usuario o contraseña incorrectos');
         return;
       }
-
+      if (!usuario.estaActivo) {
+        _mostrarError('Tu cuenta está inactiva. Contacta al administrador.');
+        return;
+      }
       if (!mounted) return;
 
       Navigator.pushReplacement(

@@ -10,7 +10,7 @@ class LoginController {
     final supabase = Supabase.instance.client;
     final data = await supabase
         .from('usuarios')
-        .select('id, nombres, apellidos, ci, email, password, fk_rol')
+        .select('id, nombres, apellidos, ci, email, password, fk_rol, estado')//agregue estado
         .ilike('email', email)
         .maybeSingle();
 

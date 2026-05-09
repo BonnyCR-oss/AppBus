@@ -6,9 +6,7 @@ class UsuarioModel {
   final String email;
   final String password;
   final int fkRol;
-  
-  // nuevo: el estado y el nombre del rol para adm de users
-  final dynamic estadoBytea; 
+  final bool estaActivo; 
   final String nombreRol;
 
   const UsuarioModel({
@@ -19,7 +17,7 @@ class UsuarioModel {
     required this.email,
     required this.password,
     required this.fkRol,
-    this.estadoBytea,
+    required this.estaActivo,
     this.nombreRol = 'Sin Rol',
   });
 
@@ -32,10 +30,11 @@ class UsuarioModel {
       email: (map['email'] ?? '').toString().trim(),
       password: (map['password'] ?? '').toString(),
       fkRol: (map['fk_rol'] as num?)?.toInt() ?? 0,
-      // nuevo
-      estadoBytea: map['estado'], 
-      // nuevo: sacamos el nombre del rol
-      nombreRol: map['roles'] != null ? map['roles']['nombre']?.toString() ?? 'Sin Rol' : 'Sin Rol',
+      estaActivo: map['estado'] == true, 
+      
+      nombreRol: map['roles'] != null 
+          ? map['roles']['nombre']?.toString() ?? 'Sin Rol' 
+          : 'Sin Rol',
     );
   }
 
