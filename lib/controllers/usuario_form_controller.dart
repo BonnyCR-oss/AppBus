@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:bcrypt/bcrypt.dart';
 import '../utils/password_generator.dart';
 import '../services/smtp_email_service.dart';
 
@@ -34,7 +35,8 @@ class UsuarioFormController {
         nombres: nombres,
         apellidos: apellidos,
       );
-      datos['password'] = contraseniaGenerada;
+      final salt = BCrypt.gensalt();
+      datos['password'] = BCrypt.hashpw(contraseniaGenerada, salt);
 
       try {
         await _supabase.from('usuarios').insert(datos);
