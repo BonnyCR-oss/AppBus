@@ -18,4 +18,15 @@ class UsuariosController {
       throw Exception('Error al cargar usuarios: $e');
     }
   }
+
+  // eliminar usuario fisicamente de la base de datos
+  Future<void> eliminarUsuarioPorId(int id) async {
+    try {
+      await _supabase.from('usuarios').delete().eq('id', id);
+    } on PostgrestException catch (e) {
+      throw Exception('Error al eliminar usuario: ${e.message}');
+    } catch (e) {
+      throw Exception('No se pudo eliminar el usuario: $e');
+    }
+  }
 }

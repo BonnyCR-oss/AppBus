@@ -23,6 +23,69 @@ class _UsuariosListViewState extends State<UsuariosListView> {
     _cargarDatos();
   }
 
+  Future<void> _mostrarModal({
+    required String titulo,
+    required String mensaje,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmarEliminacion(UsuarioModel usuario) async {
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar eliminación'),
+        content: Text(
+          '¿Deseas eliminar a ${usuario.nombreCompleto}? Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    return resultado ?? false;
+  }
+
+  Future<void> _eliminarUsuario(UsuarioModel usuario) async {
+    final confirmado = await _confirmarEliminacion(usuario);
+    if (!confirmado) return;
+
+    try {
+      await _controller.eliminarUsuarioPorId(usuario.id);
+      await _cargarDatos();
+      await _mostrarModal(
+        titulo: 'Usuario eliminado',
+        mensaje: 'El usuario fue eliminado correctamente.',
+      );
+    } catch (e) {
+      await _mostrarModal(
+        titulo: 'Error',
+        mensaje: e.toString(),
+      );
+    }
+  }
+
   Future<void> _cargarDatos() async {
     setState(() => _estaCargando = true);
     try {
@@ -31,13 +94,10 @@ class _UsuariosListViewState extends State<UsuariosListView> {
         _usuarios = usuariosObtenidos;
       });
     } catch (e) {
-      
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        await _mostrarModal(titulo: 'Error', mensaje: e.toString());
       }
     } finally {
-      
       if (mounted) {
         setState(() => _estaCargando = false);
       }
@@ -59,9 +119,7 @@ class _UsuariosListViewState extends State<UsuariosListView> {
     if (resultado is Map<String, dynamic>) {
       final aviso = resultado['aviso']?.toString();
       if (aviso != null && aviso.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(aviso), backgroundColor: Colors.orange),
-        );
+        await _mostrarModal(titulo: 'Aviso', mensaje: aviso);
       }
       if (resultado['recargar'] == true) {
         await _cargarDatos();
@@ -111,6 +169,11 @@ class _UsuariosListViewState extends State<UsuariosListView> {
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
                     ),
                     subtitle: Text('CI: ${usuario.ci} • Rol: ${usuario.nombreRol}'),
+                    trailing: IconButton(
+                      tooltip: 'Eliminar usuario',
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => _eliminarUsuario(usuario),
+                    ),
                   ),
                 );
               },

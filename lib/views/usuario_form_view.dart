@@ -53,16 +53,34 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
     super.dispose();
   }
 
+  Future<void> _mostrarModal({
+    required String titulo,
+    required String mensaje,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _guardar() async {
     if (_nombresCtrl.text.isEmpty ||
         _apellidosCtrl.text.isEmpty ||
         _ciCtrl.text.isEmpty ||
         _emailCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Faltan campos requeridos'),
-          backgroundColor: Colors.red,
-        ),
+      await _mostrarModal(
+        titulo: 'Campos requeridos',
+        mensaje: 'Completa todos los campos obligatorios.',
       );
       return;
     }
@@ -82,12 +100,11 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
 
       if (mounted) {
         if (esEdicion) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Usuario actualizado correctamente'),
-              backgroundColor: Colors.green,
-            ),
+          await _mostrarModal(
+            titulo: 'Actualización exitosa',
+            mensaje: 'Usuario actualizado correctamente.',
           );
+          if (!mounted) return;
           Navigator.pop(context, true);
           return;
         }
@@ -131,11 +148,9 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
+        await _mostrarModal(
+          titulo: 'Error',
+          mensaje: e.toString(),
         );
       }
     } finally {
