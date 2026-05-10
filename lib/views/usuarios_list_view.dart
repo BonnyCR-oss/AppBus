@@ -16,7 +16,6 @@ class _UsuariosListViewState extends State<UsuariosListView> {
   
   List<UsuarioModel> _usuarios = [];
   bool _estaCargando = true;
-  final Map<int, bool> _estaReenviandoContrasenia = {};
 
   @override
   void initState() {
@@ -87,51 +86,6 @@ class _UsuariosListViewState extends State<UsuariosListView> {
     }
   }
 
-  Future<bool> _confirmarReenvioContrasenia(UsuarioModel usuario) async {
-    final resultado = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reenviar contraseña'),
-        content: Text(
-          'Se generará una contraseña temporal nueva y se enviará al correo de ${usuario.nombreCompleto}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reenviar'),
-          ),
-        ],
-      ),
-    );
-
-    return resultado ?? false;
-  }
-
-  Future<void> _reenviarContrasenia(UsuarioModel usuario) async {
-    final confirmado = await _confirmarReenvioContrasenia(usuario);
-    if (!confirmado) return;
-
-    setState(() => _estaReenviandoContrasenia[usuario.id] = true);
-
-    try {
-      await _controller.reenviarContraseniaTemporal(usuario);
-      await _mostrarModal(
-        titulo: 'Correo enviado',
-        mensaje: 'Se envió una nueva contraseña temporal a ${usuario.email}.',
-      );
-    } catch (e) {
-      await _mostrarModal(titulo: 'Error', mensaje: e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _estaReenviandoContrasenia.remove(usuario.id));
-      }
-    }
-  }
-
   Future<void> _cargarDatos() async {
     setState(() => _estaCargando = true);
     try {
@@ -194,7 +148,6 @@ class _UsuariosListViewState extends State<UsuariosListView> {
               itemCount: _usuarios.length,
               itemBuilder: (context, index) {
                 final usuario = _usuarios[index];
-                final reenviando = _estaReenviandoContrasenia[usuario.id] == true;
                 
                 return Card(
                   elevation: 2,
@@ -221,20 +174,6 @@ class _UsuariosListViewState extends State<UsuariosListView> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        reenviando
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : IconButton(
-                                tooltip: 'Reenviar contraseña',
-                                icon: const Icon(
-                                  Icons.mark_email_read_outlined,
-                                  color: Color(0xFF638541),
-                                ),
-                                onPressed: () => _reenviarContrasenia(usuario),
-                              ),
                         IconButton(
                           tooltip: 'Desactivar usuario',
                           icon: const Icon(Icons.person_off_outlined, color: Colors.red),

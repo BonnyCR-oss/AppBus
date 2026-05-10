@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:bcrypt/bcrypt.dart';
 import '../utils/password_generator.dart';
 import '../services/smtp_email_service.dart';
 
@@ -30,9 +29,12 @@ class UsuarioFormController {
 
     // Si es CREACION (nuevo usuario), generar contrasenia automatica
     if (id == null) {
-      final contraseniaGenerada = PasswordGenerator.generarContraseniaSegura();
-      final salt = BCrypt.gensalt();
-      datos['password'] = BCrypt.hashpw(contraseniaGenerada, salt);
+      final contraseniaGenerada = PasswordGenerator.generarContraseniaDesdeDatos(
+        ci: ci,
+        nombres: nombres,
+        apellidos: apellidos,
+      );
+      datos['password'] = contraseniaGenerada;
 
       try {
         await _supabase.from('usuarios').insert(datos);
