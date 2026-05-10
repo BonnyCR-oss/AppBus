@@ -1,11 +1,13 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bcrypt/bcrypt.dart';
 import '../utils/password_generator.dart';
+import '../services/smtp_email_service.dart';
 
 class UsuarioFormController {
   final _supabase = Supabase.instance.client;
+  final _smtpEmailService = SmtpEmailService();
 
-  Future<String?> guardarUsuario({
+  Future<void> guardarUsuario({
     int? id,
     required String nombres,
     required String apellidos,
@@ -34,7 +36,17 @@ class UsuarioFormController {
 
       try {
         await _supabase.from('usuarios').insert(datos);
-        return contraseniaGenerada;
+
+        // Intentar enviar email, pero no cancelar si falla
+        try {
+          await _smtpEmailService.enviarContraseniaGenerada(
+            to: email,
+            nombre: '$nombres $apellidos'.trim(),
+            contrasenia: contraseniaGenerada,
+          );
+        } catch (_) {
+          // No lanzar error, solo registrar
+        }
       } on PostgrestException catch (e) {
         if (e.code == '23505') {
           if (e.message.contains('usuarios_ci_key')) {
@@ -46,13 +58,12 @@ class UsuarioFormController {
         }
         throw 'Error de base de datos: ${e.message}';
       } catch (e) {
-        throw 'Error inesperado al guardar: $e';
+        throw 'Error al crear usuario: $e';
       }
     } else {
       // Si es EDICION, solo actualizar datos (sin cambiar contrasenia)
       try {
         await _supabase.from('usuarios').update(datos).eq('id', id);
-        return null;
       } on PostgrestException catch (e) {
         if (e.code == '23505') {
           if (e.message.contains('usuarios_ci_key')) {

@@ -88,7 +88,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
     setState(() => _estaGuardando = true);
 
     try {
-      final aviso = await _controller.guardarUsuario(
+      await _controller.guardarUsuario(
         id: widget.usuarioActual?.id,
         nombres: _nombresCtrl.text.trim(),
         apellidos: _apellidosCtrl.text.trim(),
@@ -109,38 +109,10 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
           return;
         }
 
-        final contraseniaGenerada = aviso ?? '';
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Usuario creado'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Contrasenia generada:'),
-                const SizedBox(height: 8),
-                SelectableText(
-                  contraseniaGenerada,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Guardala para entregarla al usuario.',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
+        await _mostrarModal(
+          titulo: 'Usuario creado',
+          mensaje:
+              'La contrasenia temporal fue enviada al correo del usuario.',
         );
 
         if (!mounted) return;
@@ -220,7 +192,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'La contrasenia se generara automaticamente y se mostrara al guardar.',
+                        'La contrasenia se generara automaticamente y se enviara al correo del usuario.',
                         style: TextStyle(
                           color: Colors.grey[700],
                           fontSize: 14,
