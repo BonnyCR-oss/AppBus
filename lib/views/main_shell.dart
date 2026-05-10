@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/session_service.dart';
 import '../widgets/bottom_navbar.dart';
 import 'bus_photos_view.dart';
 import 'login_view.dart';
@@ -28,6 +29,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   late List<BottomNavItem> _navItems;
+  final SessionService _sessionService = SessionService();
 
   bool get _esDueno => widget.rolUsuarioId == widget.rolDuenoId;
 
@@ -201,10 +203,14 @@ class _MainShellState extends State<MainShell> {
             ),
             IconButton(
               icon: const Icon(Icons.logout, color: Colors.white),
-              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginView()),
-                (route) => false,
-              ),
+              onPressed: () async {
+                await _sessionService.limpiarSesion();
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginView()),
+                  (route) => false,
+                );
+              },
             ),
             const SizedBox(width: 8),
           ],

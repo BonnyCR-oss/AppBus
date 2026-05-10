@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/login_controller.dart';
+import '../services/session_service.dart';
 import 'main_shell.dart';
 
 class LoginView extends StatefulWidget {
@@ -15,6 +16,7 @@ class _LoginViewState extends State<LoginView> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final LoginController _controller = LoginController();
+  final SessionService _sessionService = SessionService();
   bool _iniciandoSesion = false;
 
   void _mostrarError(String mensaje) {
@@ -58,6 +60,13 @@ class _LoginViewState extends State<LoginView> {
         _mostrarError('Tu cuenta está inactiva. Contacta al administrador.');
         return;
       }
+
+      await _sessionService.guardarSesion(
+        nombreUsuario: usuario.nombreCompleto,
+        contactoUsuario: usuario.email,
+        rolUsuarioId: usuario.fkRol,
+      );
+
       if (!mounted) return;
 
       Navigator.pushReplacement(
