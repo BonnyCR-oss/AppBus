@@ -111,7 +111,7 @@ class _LoginViewState extends State<LoginView> {
                 height: 80,
                 decoration: BoxDecoration(
                   color: const Color(0xFF95A781),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(100),
                 ),
                 child: Image.asset('assets/images/icono.png', fit: BoxFit.contain),
               ),
