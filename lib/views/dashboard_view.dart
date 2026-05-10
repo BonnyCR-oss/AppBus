@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/bottom_navbar.dart';
 import 'bus_photos_view.dart';
+import 'login_view.dart';
 import 'rutas_view.dart';
 import 'venta_view.dart';
 import 'usuarios_list_view.dart';
@@ -11,7 +13,7 @@ const Map<String, String> _driverDetails = {
   'birthDate': '--',
 };
 
-class DashboardView extends StatelessWidget {
+class DashboardView extends StatefulWidget {
   const DashboardView({
     super.key,
     required this.nombreUsuario,
@@ -25,7 +27,84 @@ class DashboardView extends StatelessWidget {
   final int rolUsuarioId;
   final int rolDuenoId;
 
-  bool get _esDueno => rolUsuarioId == rolDuenoId;
+  @override
+  State<DashboardView> createState() => _DashboardViewState();
+}
+
+class _DashboardViewState extends State<DashboardView> {
+  bool get _esDueno => widget.rolUsuarioId == widget.rolDuenoId;
+
+  late List<BottomNavItem> _navItems;
+
+  @override
+  void initState() {
+    super.initState();
+    _navItems = _buildNavItems();
+  }
+
+  List<BottomNavItem> _buildNavItems() {
+    final items = <BottomNavItem>[];
+
+    // Todos pueden ver Venta (es la opción principal)
+    items.add(
+      BottomNavItem(
+        label: 'Venta',
+        icon: Icons.confirmation_number_outlined,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VentaView()),
+          );
+        },
+      ),
+    );
+
+    // Todos pueden ver Rutas
+    items.add(
+      BottomNavItem(
+        label: 'Rutas',
+        icon: Icons.map,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const RutasView()),
+          );
+        },
+      ),
+    );
+
+    // Galería para todos
+    items.add(
+      BottomNavItem(
+        label: 'Galería',
+        icon: Icons.photo_library_outlined,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BusPhotosView()),
+          );
+        },
+      ),
+    );
+
+    // Administración solo para dueños/admin
+    if (_esDueno) {
+      items.add(
+        BottomNavItem(
+          label: 'Admin',
+          icon: Icons.admin_panel_settings_outlined,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UsuariosListView()),
+            );
+          },
+        ),
+      );
+    }
+
+    return items;
+  }
 
   void _mostrarDetallesChofer(BuildContext context) {
     showDialog(
@@ -43,14 +122,16 @@ class DashboardView extends StatelessWidget {
                 child: Icon(Icons.person, color: Colors.white, size: 40),
               ),
               const SizedBox(height: 16),
-              Text(nombreUsuario,
+              Text(widget.nombreUsuario,
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('vendedor certificado',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+              Text(
+                _esDueno ? 'Administrador' : 'Vendedor',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
               const Divider(height: 32),
               _buildDialogInfoRow(
-                  Icons.phone, 'Contacto', contactoUsuario),
+                  Icons.phone, 'Contacto', widget.contactoUsuario),
               _buildDialogInfoRow(Icons.bloodtype_outlined, 'Sangre',
                   _driverDetails['bloodGroup']!),
               _buildDialogInfoRow(
@@ -83,12 +164,12 @@ class DashboardView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(nombreUsuario,
+              Text(widget.nombreUsuario,
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 18)),
-              Text(contactoUsuario,
+              Text(widget.contactoUsuario,
                   style:
                       const TextStyle(color: Colors.white70, fontSize: 14)),
             ],
@@ -108,7 +189,10 @@ class DashboardView extends StatelessWidget {
               onPressed: () {}),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginView()),
+              (route) => false,
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -118,6 +202,25 @@ class DashboardView extends StatelessWidget {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
+              Text(
+                _esDueno ? '👨‍💼 Administrador' : '🚌 Vendedor',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF638541),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _buildMenuActionButton(
+                context,
+                title: 'Venta (Viaje Activo)',
+                subtitle: 'Vender boletos del viaje único activo',
+                icon: Icons.confirmation_number_outlined,
+                color: const Color(0xFFC0A261),
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const VentaView())),
+              ),
+              const SizedBox(height: 24),
               _buildMenuActionButton(
                 context,
                 title: 'Gestión de Rutas',
@@ -128,46 +231,6 @@ class DashboardView extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => const RutasView())),
               ),
               const SizedBox(height: 24),
-
-              _buildMenuActionButton(
-                context,
-                title: 'Venta (Viaje Activo)',
-                subtitle: 'Ir a venta del viaje único activo',
-                icon: Icons.confirmation_number_outlined,
-                color: const Color(0xFFC0A261),
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const VentaView())),
-              ),
-              const SizedBox(height: 24),
-
-              _buildMenuActionButton(
-                context,
-                title: 'Administración',
-                subtitle: _esDueno
-                    ? 'Control de usuarios y buses (Dueño)'
-                    : 'Solo disponible para dueños',
-                icon: Icons.admin_panel_settings_outlined,
-                color: Colors.blueGrey[600]!,
-                showLock: !_esDueno,
-                onTap: () {
-                  if (_esDueno) {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const UsuariosListView()));
-                    return;
-                  }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content:
-                          Text('No tienes permisos para Administración'),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-
               _buildMenuActionButton(
                 context,
                 title: 'Galería del Bus',
@@ -177,9 +240,30 @@ class DashboardView extends StatelessWidget {
                 onTap: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const BusPhotosView())),
               ),
+              if (_esDueno) ...[
+                const SizedBox(height: 24),
+                _buildMenuActionButton(
+                  context,
+                  title: 'Administración',
+                  subtitle: 'Control de usuarios y buses',
+                  icon: Icons.admin_panel_settings_outlined,
+                  color: Colors.blueGrey[600]!,
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UsuariosListView())),
+                ),
+              ],
+              const SizedBox(height: 40),
             ],
           ),
         ),
+      ),
+      bottomNavigationBar: CustomBottomNavBar(
+        items: _navItems,
+        backgroundColor: const Color(0xFF638541),
+        activeColor: Colors.white,
+        inactiveColor: Colors.white54,
       ),
     );
   }

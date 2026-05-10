@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/login_controller.dart';
-import 'dashboard_view.dart';
+import 'main_shell.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -63,7 +63,7 @@ class _LoginViewState extends State<LoginView> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => DashboardView(
+          builder: (_) => MainShell(
             nombreUsuario: usuario.nombreCompleto,
             contactoUsuario: usuario.email,
             rolUsuarioId: usuario.fkRol,

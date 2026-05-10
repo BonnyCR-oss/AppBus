@@ -16,7 +16,6 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
   final TextEditingController _apellidosCtrl = TextEditingController();
   final TextEditingController _ciCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
-  final TextEditingController _passwordCtrl = TextEditingController();
   
   String _rolSeleccionado = 'Vendedor';
   bool _estaActivo = true;
@@ -47,37 +46,98 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
 
   @override
   void dispose() {
-    _nombresCtrl.dispose(); _apellidosCtrl.dispose(); _ciCtrl.dispose();
-    _emailCtrl.dispose(); _passwordCtrl.dispose(); 
+    _nombresCtrl.dispose();
+    _apellidosCtrl.dispose();
+    _ciCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _guardar() async {
-    if (_nombresCtrl.text.isEmpty || _apellidosCtrl.text.isEmpty || _ciCtrl.text.isEmpty || _emailCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Faltan campos'), backgroundColor: Colors.red));
+    if (_nombresCtrl.text.isEmpty ||
+        _apellidosCtrl.text.isEmpty ||
+        _ciCtrl.text.isEmpty ||
+        _emailCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Faltan campos requeridos'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
     setState(() => _estaGuardando = true);
 
     try {
-      await _controller.guardarUsuario(
+      final aviso = await _controller.guardarUsuario(
         id: widget.usuarioActual?.id,
         nombres: _nombresCtrl.text.trim(),
         apellidos: _apellidosCtrl.text.trim(),
         ci: _ciCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
-        passwordPlana: _passwordCtrl.text,
         rolSeleccionado: _rolSeleccionado,
-        estaActivo: _estaActivo, 
+        estaActivo: _estaActivo,
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardado'), backgroundColor: Colors.green));
-        Navigator.pop(context, true); 
+        if (esEdicion) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Usuario actualizado correctamente'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+          return;
+        }
+
+        final contraseniaGenerada = aviso ?? '';
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Usuario creado'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Contrasenia generada:'),
+                const SizedBox(height: 8),
+                SelectableText(
+                  contraseniaGenerada,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Guardala para entregarla al usuario.',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+
+        if (!mounted) return;
+        Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _estaGuardando = false);
     }
@@ -123,12 +183,40 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
             ),
             const SizedBox(height: 16),
             TextField(controller: _emailCtrl, decoration: _inputDecoration('Email')),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordCtrl, obscureText: true,
-              decoration: _inputDecoration('Contraseña', hint: esEdicion ? 'Opcional' : 'Requerido'),
-            ),
             
+            const SizedBox(height: 24),
+            
+            // Aviso sobre contraseña automática
+            if (!esEdicion)
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF638541).withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF638541), width: 1),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: const Color(0xFF638541),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'La contrasenia se generara automaticamente y se mostrara al guardar.',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             const SizedBox(height: 24),
 
             Container(

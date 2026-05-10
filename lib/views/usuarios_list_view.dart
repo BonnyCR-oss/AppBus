@@ -45,14 +45,33 @@ class _UsuariosListViewState extends State<UsuariosListView> {
   }
     
 
-  void _irAlFormulario({UsuarioModel? usuario}) {
-    Navigator.push(
+  Future<void> _irAlFormulario({UsuarioModel? usuario}) async {
+    final resultado = await Navigator.push(
       context,
       MaterialPageRoute(
         // Le pasamos el usuario (puede ir lleno o null)
         builder: (context) => UsuarioFormView(usuarioActual: usuario),
       ),
     );
+
+    if (!mounted) return;
+
+    if (resultado is Map<String, dynamic>) {
+      final aviso = resultado['aviso']?.toString();
+      if (aviso != null && aviso.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(aviso), backgroundColor: Colors.orange),
+        );
+      }
+      if (resultado['recargar'] == true) {
+        await _cargarDatos();
+      }
+      return;
+    }
+
+    if (resultado == true) {
+      await _cargarDatos();
+    }
   }
 
   @override
