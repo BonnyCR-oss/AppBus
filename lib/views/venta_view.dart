@@ -30,8 +30,51 @@ class _VentaViewState extends State<VentaView> {
   List<RutaModel> _rutas = [];
   List<AsientoModel> _asientos = [];
   Map<int, Map<String, dynamic>> _detalleBoletoPorAsiento = {};
-  Set<int> _asientosSeleccionadosIds = <int>{};
+  final Set<int> _asientosSeleccionadosIds = <int>{};
   ViajeModel? _viajeSeleccionado;
+
+  Widget _buildCampoDetalle({
+    required IconData icon,
+    required String etiqueta,
+    required String valor,
+    Color? valorColor,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8F2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF638541)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Color(0xFF2F3A2A), fontSize: 14),
+                children: [
+                  TextSpan(
+                    text: '$etiqueta: ',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  TextSpan(
+                    text: valor,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: valorColor ?? const Color(0xFF2F3A2A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -226,22 +269,64 @@ class _VentaViewState extends State<VentaView> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Detalle del asiento ${asiento.numero}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          title: Row(
             children: [
-              Text('Comprador: ${nombre.isEmpty ? '-' : nombre}'),
-              Text('CI: ${ci.isEmpty ? '-' : ci}'),
-              Text('Precio: Bs ${precio.isEmpty ? '-' : precio}'),
-              Text('Fecha venta: $fecha'),
-              Text('Estado: ${estado.isEmpty ? '-' : estado}'),
-              Text('Origen: $origen'),
-              Text('Destino: $destino'),
-              // mostramos el nombre completo del vendedor
-              Text('Vendedor: ${nombreVendedor.isEmpty ? '-' : nombreVendedor}',
+              const Icon(
+                Icons.airline_seat_recline_normal,
+                color: Color(0xFF638541),
               ),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Detalle del asiento ${asiento.numero}')),
             ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCampoDetalle(
+                  icon: Icons.person_outline,
+                  etiqueta: 'Comprador',
+                  valor: nombre.isEmpty ? '-' : nombre,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.badge_outlined,
+                  etiqueta: 'CI',
+                  valor: ci.isEmpty ? '-' : ci,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.payments_outlined,
+                  etiqueta: 'Precio',
+                  valor: 'Bs ${precio.isEmpty ? '-' : precio}',
+                  valorColor: const Color(0xFF638541),
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.calendar_month_outlined,
+                  etiqueta: 'Fecha venta',
+                  valor: fecha,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.flag_outlined,
+                  etiqueta: 'Estado',
+                  valor: estado.isEmpty ? '-' : estado,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.trip_origin,
+                  etiqueta: 'Origen',
+                  valor: origen.isEmpty ? '-' : origen,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.place_outlined,
+                  etiqueta: 'Destino',
+                  valor: destino.isEmpty ? '-' : destino,
+                ),
+                _buildCampoDetalle(
+                  icon: Icons.support_agent,
+                  etiqueta: 'Vendedor',
+                  valor: nombreVendedor.isEmpty ? '-' : nombreVendedor,
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -378,14 +463,14 @@ class _VentaViewState extends State<VentaView> {
                     const SizedBox(height: 14),
 
                     DropdownButtonFormField<String>(
-                      value: origenSeleccionado,
+                      initialValue: origenSeleccionado,
                       decoration: const InputDecoration(labelText: 'Sube en'),
                       items: paradas.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                       onChanged: (v) => setModalState(() => origenSeleccionado = v!),
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: destinoSeleccionado,
+                      initialValue: destinoSeleccionado,
                       decoration: const InputDecoration(labelText: 'Baja en'),
                       items: paradas.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                       onChanged: (v) => setModalState(() => destinoSeleccionado = v!),
@@ -407,12 +492,14 @@ class _VentaViewState extends State<VentaView> {
                 ),
                 ElevatedButton(
                   onPressed: guardando ? null : () async {
+                    final messenger = ScaffoldMessenger.of(this.context);
+                    final navigator = Navigator.of(contextoModal);
                     final nombre = nombreCtrl.text.trim();
                     final ci = ciCtrl.text.trim();
                     final precioFinal = double.tryParse(precioCtrl.text) ?? 0.0;
 
                     if (nombre.isEmpty || ci.isEmpty || precioFinal <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         const SnackBar(content: Text('Completa todos los datos y el precio.')),
                       );
                       return;
@@ -428,7 +515,7 @@ class _VentaViewState extends State<VentaView> {
                         precio: precioFinal,
                       );
                       if (!mounted) return;
-                      Navigator.of(contextoModal).pop();
+                      navigator.pop();
                     } catch (e) {
                       setModalState(() => guardando = false);
                       // Manejar error...
@@ -537,7 +624,7 @@ class _VentaViewState extends State<VentaView> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             // Columna 0: Asiento izquierda 1
-                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 0 ? asientosEnFila[0] : null)),
+                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.isNotEmpty ? asientosEnFila[0] : null)),
                             const SizedBox(width: 6),
                             // Columna 1: Asiento izquierda 2
                             SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 1 ? asientosEnFila[1] : null)),

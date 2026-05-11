@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/asiento_model.dart';
@@ -72,5 +73,84 @@ class BoletoController {
         .toList();
 
     await _supabase.from('boletos').insert(boletos);
+  }
+
+  Future<double> obtenerTotalRecaudadoPorViaje(int viajeId) async {
+    try {
+      final data = await _supabase
+          .from('boletos')
+          .select('precio')
+          .eq('fk_viaje', viajeId)
+          .eq('estado', 'vendido');
+
+      double total = 0.0;
+      for (final row in data as List) {
+        final precio = row['precio'];
+        if (precio is num) {
+          total += precio.toDouble();
+        }
+      }
+      return total;
+    } catch (e) {
+      throw 'Error al calcular total recaudado: $e';
+    }
+  }
+
+  Future<Map<int, Map<String, dynamic>>> obtenerEstadisticasVendedores(
+      int viajeId) async {
+    try {
+      final data = await _supabase
+          .from('boletos')
+          .select('fk_usuario_vendedor, precio')
+          .eq('fk_viaje', viajeId)
+          .eq('estado', 'vendido');
+
+      final Map<int, Map<String, dynamic>> estadisticas = {};
+
+      for (final row in data as List) {
+        final vendedorId = _toInt(row['fk_usuario_vendedor']);
+        final precio = (row['precio'] is num) ? row['precio'].toDouble() : 0.0;
+
+        if (vendedorId <= 0) continue;
+
+        if (!estadisticas.containsKey(vendedorId)) {
+          estadisticas[vendedorId] = {
+            'cantidad_boletos': 0,
+            'total_recaudado': 0.0,
+            'nombres': '',
+            'apellidos': '',
+          };
+        }
+
+        estadisticas[vendedorId]!['cantidad_boletos'] =
+            _toInt(estadisticas[vendedorId]!['cantidad_boletos']) + 1;
+        estadisticas[vendedorId]!['total_recaudado'] =
+            (estadisticas[vendedorId]!['total_recaudado'] as double) + precio;
+      }
+
+      // Obtener nombres de vendedores
+      for (final vendedorId in estadisticas.keys) {
+        try {
+          final usuario = await _supabase
+              .from('usuarios')
+              .select('nombres, apellidos')
+              .eq('id', vendedorId)
+              .maybeSingle();
+
+          if (usuario != null) {
+            estadisticas[vendedorId]!['nombres'] =
+                (usuario['nombres'] ?? '').toString();
+            estadisticas[vendedorId]!['apellidos'] =
+                (usuario['apellidos'] ?? '').toString();
+          }
+        } catch (e) {
+          debugPrint('Error al obtener nombre del vendedor $vendedorId: $e');
+        }
+      }
+
+      return estadisticas;
+    } catch (e) {
+      throw 'Error al obtener estadísticas de vendedores: $e';
+    }
   }
 }

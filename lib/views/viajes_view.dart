@@ -5,6 +5,7 @@ import '../controllers/viaje_controller.dart';
 import '../models/ruta_model.dart';
 import '../models/viaje_model.dart';
 import '../services/session_service.dart';
+import 'viaje_detalle_view.dart';
 
 class ViajesView extends StatefulWidget {
   const ViajesView({
@@ -99,7 +100,7 @@ class _ViajesViewState extends State<ViajesView> {
     }
   }
 
-  Widget _buildListaViajes(List<ViajeModel> viajes, {required String emptyText}) {
+  Widget _buildListaViajes(List<ViajeModel> viajes, {required String emptyText, bool esHistorial = false}) {
     if (viajes.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -128,7 +129,7 @@ class _ViajesViewState extends State<ViajesView> {
           ),
         );
 
-        if (widget.esAdmin) {
+        if (widget.esAdmin && !esHistorial) {
           widgetEstado = PopupMenuButton<String>(
             initialValue: viaje.estado,
             tooltip: 'Cambiar estado',
@@ -150,6 +151,7 @@ class _ViajesViewState extends State<ViajesView> {
           elevation: 1,
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
+            onTap: esHistorial ? () => _abrirDetalleViaje(viaje) : null,
             title: Text(
               '${viaje.origenRuta ?? 'Ruta ${viaje.fkRuta}'} ➔ ${viaje.destinoRuta ?? ''}'.trim(),
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -157,10 +159,18 @@ class _ViajesViewState extends State<ViajesView> {
             subtitle: Text(
               'Fecha: ${viaje.fechaSalida}  Hora: ${_formatearHora(viaje.horaSalida)}\nBus: ${viaje.fkBus ?? '-'}',
             ),
-            trailing: widgetEstado, // Aquí insertamos nuestro widget dinámico
+            trailing: widgetEstado,
           ),
         );
       }).toList(),
+    );
+  }
+
+  void _abrirDetalleViaje(ViajeModel viaje) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ViajeDetalleView(viaje: viaje),
+      ),
     );
   }
 
@@ -200,7 +210,7 @@ class _ViajesViewState extends State<ViajesView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<int>(
-                  value: rutaId,
+                  initialValue: rutaId,
                   decoration: const InputDecoration(labelText: 'Ruta'),
                   items: _rutas
                       .map(
@@ -223,7 +233,7 @@ class _ViajesViewState extends State<ViajesView> {
                     final seleccion = await showDatePicker(
                       context: dialogContext,
                       initialDate: fecha,
-                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      firstDate: DateTime.now(),
                       lastDate: DateTime.now().add(const Duration(days: 365)),
                     );
                     if (seleccion != null) {
@@ -262,15 +272,47 @@ class _ViajesViewState extends State<ViajesView> {
             ),
             ElevatedButton(
               onPressed: () async {
+                final messenger = ScaffoldMessenger.of(this.context);
                 final busId = int.tryParse(busCtrl.text.trim());
                 if (busId == null || busId <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text('Ingresa un ID de bus válido.'),
                       backgroundColor: Colors.red,
                     ),
                   );
                   return;
+                }
+
+                // Validar que la fecha y hora no sean pasadas
+                final ahora = DateTime.now();
+                final fechaHoy = DateTime(ahora.year, ahora.month, ahora.day);
+                final fechaSeleccionada = DateTime(fecha.year, fecha.month, fecha.day);
+
+                if (fechaSeleccionada.isBefore(fechaHoy)) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('No puedes crear viajes con fechas anteriores.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                // Si es hoy, validar que la hora no sea pasada
+                if (fechaSeleccionada.isAtSameMomentAs(fechaHoy)) {
+                  final horaActual = TimeOfDay.fromDateTime(ahora);
+                  if (hora.hour < horaActual.hour ||
+                      (hora.hour == horaActual.hour &&
+                          hora.minute < horaActual.minute)) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('La hora del viaje no puede ser pasada.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
                 }
 
                 final fechaStr = fecha.toIso8601String().split('T').first;
@@ -290,7 +332,7 @@ class _ViajesViewState extends State<ViajesView> {
 
                   await _cargarDatos();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Viaje creado correctamente.'),
                         backgroundColor: Colors.green,
@@ -299,7 +341,7 @@ class _ViajesViewState extends State<ViajesView> {
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
                     );
                     setState(() => _cargando = false);
@@ -357,6 +399,7 @@ class _ViajesViewState extends State<ViajesView> {
                       _buildListaViajes(
                         _historial,
                         emptyText: 'No hay viajes anteriores en el historial.',
+                        esHistorial: true,
                       ),
                     ],
                     const SizedBox(height: 80),
