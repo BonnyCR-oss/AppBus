@@ -34,9 +34,15 @@ class AsientoModel {
     return value == 'disponible' || value == 'libre' || value == 'activo';
   }
 
-  // Calcula fila (basada en número: 1-4->fila 0, 5-8->fila 1, etc.)
-  // Agrupa de 4 asientos por fila (2 izq + pasillo + 2 der)
-  int get fila => (numero - 1) ~/ 4;
+  // Calcula fila con salto de puerta entre 10 y 11.
+  // 1-4 -> fila 0, 5-8 -> fila 1, 9-10 -> fila 2,
+  // 11-14 -> fila 3, 15-18 -> fila 4, etc.
+  int get fila {
+    if (numero <= 10) {
+      return (numero - 1) ~/ 4;
+    }
+    return ((numero - 11) ~/ 4) + 3;
+  }
 
   // Calcula posición en la fila para layout de 5 columnas:
   // Columnas: 0(asiento izq 1), 1(asiento izq 2), 2(pasillo), 3(asiento der 1), 4(asiento der 2)

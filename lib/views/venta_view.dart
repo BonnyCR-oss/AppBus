@@ -163,43 +163,67 @@ class _VentaViewState extends State<VentaView> {
           ],
         ),
         const SizedBox(height: 16),
-        // Layout de 5 columnas: 2 izq | pasillo | 2 der
-        ...filas.map((fila) {
-          final asientosEnFila = porFila[fila]!..sort((a, b) => a.numero.compareTo(b.numero));
+        SizedBox(
+          height: 460,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 3.0,
+              boundaryMargin: const EdgeInsets.all(120),
+              constrained: false,
+              child: SizedBox(
+                width: 270,
+                child: Column(
+                  children: [
+                    // Layout de 5 columnas: 2 izq | pasillo | 2 der
+                    ...filas.map((fila) {
+                      final asientosEnFila = porFila[fila]!..sort((a, b) => a.numero.compareTo(b.numero));
 
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Columna 0: Asiento izquierda 1
-                SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 0 ? asientosEnFila[0] : null)),
-                const SizedBox(width: 6),
-                // Columna 1: Asiento izquierda 2
-                SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 1 ? asientosEnFila[1] : null)),
-                const SizedBox(width: 16),
-                // Columna 2: PASILLO
-                SizedBox(
-                  width: 30,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.arrow_upward, size: 16, color: Colors.grey[400]),
-                      Text('PASILLO', style: TextStyle(fontSize: 9, color: Colors.grey[500])),
-                      Icon(Icons.arrow_downward, size: 16, color: Colors.grey[400]),
-                    ],
-                  ),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Columna 0: Asiento izquierda 1
+                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 0 ? asientosEnFila[0] : null)),
+                            const SizedBox(width: 6),
+                            // Columna 1: Asiento izquierda 2
+                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 1 ? asientosEnFila[1] : null)),
+                            const SizedBox(width: 16),
+                            // Columna 2: PASILLO
+                            SizedBox(
+                              width: 30,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.arrow_upward, size: 16, color: Colors.grey[400]),
+                                  Text('PASILLO', style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                                  Icon(Icons.arrow_downward, size: 16, color: Colors.grey[400]),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Columna 3: Asiento derecha 1
+                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 3 ? asientosEnFila[3] : null)),
+                            const SizedBox(width: 6),
+                            // Columna 4: Asiento derecha 2
+                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 2 ? asientosEnFila[2] : null)),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                // Columna 3: Asiento derecha 1
-                SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 2 ? asientosEnFila[2] : null)),
-                const SizedBox(width: 6),
-                // Columna 4: Asiento derecha 2
-                SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 3 ? asientosEnFila[3] : null)),
-              ],
+              ),
             ),
-          );
-        }),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Usa dos dedos para hacer zoom y arrastrar el mapa',
+          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+        ),
       ],
     );
   }
