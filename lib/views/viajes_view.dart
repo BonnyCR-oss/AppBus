@@ -39,7 +39,7 @@ class _ViajesViewState extends State<ViajesView> {
     setState(() => _cargando = true);
     try {
       final sesion = await _sessionService.leerSesion();
-      final viajesHoy = await _viajeController.obtenerViajesDeHoy();
+      final viajesHoy = await _viajeController.obtenerViajesActivos();
       final rutas = widget.esAdmin ? await _rutaController.obtenerRutas() : <RutaModel>[];
       final historial = widget.esAdmin
           ? await _viajeController.obtenerHistorialViajes()
@@ -70,9 +70,33 @@ class _ViajesViewState extends State<ViajesView> {
 
   Color _colorEstado(String estado) {
     final value = estado.toLowerCase();
-    if (value == 'activo') return Colors.green;
+    if (value == 'en marcha' || value == 'activo') return Colors.green;
     if (value == 'finalizado') return Colors.grey;
     return Colors.orange;
+  }
+
+  Future<void> _cambiarEstadoViaje(int idViaje, String nuevoEstado) async {
+    setState(() => _cargando = true);
+    try {
+      await _viajeController.actualizarEstadoViaje(idViaje, nuevoEstado);
+      await _cargarDatos(); 
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Estado actualizado a "$nuevoEstado"'), 
+            backgroundColor: Colors.green
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al actualizar: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _cargando = false);
+      }
+    }
   }
 
   Widget _buildListaViajes(List<ViajeModel> viajes, {required String emptyText}) {
@@ -87,37 +111,56 @@ class _ViajesViewState extends State<ViajesView> {
     }
 
     return Column(
-      children: viajes
-          .map(
-            (viaje) => Card(
-              elevation: 1,
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(
-                  '${viaje.origenRuta ?? 'Ruta ${viaje.fkRuta}'} ➔ ${viaje.destinoRuta ?? ''}'.trim(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  'Fecha: ${viaje.fechaSalida}  Hora: ${_formatearHora(viaje.horaSalida)}\nBus: ${viaje.fkBus ?? '-'}',
-                ),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _colorEstado(viaje.estado).withAlpha(35),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    viaje.estado,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: _colorEstado(viaje.estado),
-                    ),
-                  ),
-                ),
-              ),
+      children: viajes.map((viaje) {
+        
+        Widget widgetEstado = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: _colorEstado(viaje.estado).withAlpha(35),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            viaje.estado,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: _colorEstado(viaje.estado),
             ),
-          )
-          .toList(),
+          ),
+        );
+
+        if (widget.esAdmin) {
+          widgetEstado = PopupMenuButton<String>(
+            initialValue: viaje.estado,
+            tooltip: 'Cambiar estado',
+            onSelected: (nuevoEstado) {
+              if (nuevoEstado != viaje.estado) {
+                _cambiarEstadoViaje(viaje.id, nuevoEstado);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'Programado', child: Text('Programado')),
+              const PopupMenuItem(value: 'En marcha', child: Text('En marcha')),
+              const PopupMenuItem(value: 'Finalizado', child: Text('Finalizado')),
+            ],
+            child: widgetEstado,
+          );
+        }
+
+        return Card(
+          elevation: 1,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            title: Text(
+              '${viaje.origenRuta ?? 'Ruta ${viaje.fkRuta}'} ➔ ${viaje.destinoRuta ?? ''}'.trim(),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              'Fecha: ${viaje.fechaSalida}  Hora: ${_formatearHora(viaje.horaSalida)}\nBus: ${viaje.fkBus ?? '-'}',
+            ),
+            trailing: widgetEstado, // Aquí insertamos nuestro widget dinámico
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -294,13 +337,13 @@ class _ViajesViewState extends State<ViajesView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'VIAJES DE HOY',
+                      'VIAJES ACTIVOS (PROGRAMADOS Y EN MARCHA)',
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                     ),
                     const SizedBox(height: 8),
                     _buildListaViajes(
                       _viajesHoy,
-                      emptyText: 'No hay viajes registrados para hoy.',
+                      emptyText: 'No hay viajes programados para partir.',
                     ),
                     if (widget.esAdmin) ...[
                       const SizedBox(height: 20),

@@ -16,7 +16,7 @@ class BoletoController {
     final data = await _supabase
         .from('boletos')
         .select(
-            'id, fk_asiento, nombre_pasajero, ci_pasajero, precio, fecha_venta, estado, fk_usuario_vendedor')
+            'id, fk_asiento, nombre_pasajero, ci_pasajero, precio, fecha_venta, estado, fk_usuario_vendedor,origen, destino')
         .eq('fk_viaje', viajeId)
         .order('fecha_venta', ascending: false);
 
@@ -41,6 +41,8 @@ class BoletoController {
     required String ciPasajero,
     required double precioUnitario,
     required int? vendedorId,
+    required String origen,
+    required String destino,
   }) async {
     if (asientos.isEmpty) {
       throw 'Debes seleccionar al menos un asiento.';
@@ -62,6 +64,8 @@ class BoletoController {
             'ci_pasajero': ciPasajero,
             'precio': precioUnitario,
             'fecha_venta': fechaVenta,
+            'origen': origen,
+            'destino': destino,
             'estado': 'vendido',
           },
         )

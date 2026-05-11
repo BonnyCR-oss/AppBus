@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/asiento_controller.dart';
 import '../controllers/boleto_controller.dart';
@@ -42,7 +43,7 @@ class _VentaViewState extends State<VentaView> {
     setState(() => _cargandoViajes = true);
     try {
       final resultados = await Future.wait([
-        _viajeController.obtenerViajesDeHoy(),
+        _viajeController.obtenerViajesActivos(),
         _rutaController.obtenerRutas(),
       ]);
       final viajes = resultados[0] as List<ViajeModel>;
@@ -190,9 +191,35 @@ class _VentaViewState extends State<VentaView> {
     final nombre = _valorDetalle(detalle, 'nombre_pasajero');
     final ci = _valorDetalle(detalle, 'ci_pasajero');
     final estado = _valorDetalle(detalle, 'estado');
-    final vendedor = _valorDetalle(detalle, 'fk_usuario_vendedor');
+    final vendedorId = _valorDetalle(detalle, 'fk_usuario_vendedor');
     final precio = _valorDetalle(detalle, 'precio');
     final fecha = _formatearFechaVenta(detalle['fecha_venta']);
+
+    String nombreVendedor = vendedorId; 
+    
+    if (vendedorId.isNotEmpty && vendedorId != '-') {
+      try {
+        final respuesta = await Supabase.instance.client
+            .from('usuarios')
+            .select('nombres, apellidos') 
+            .eq('id', vendedorId)
+            .maybeSingle();
+
+        if (respuesta != null) {
+          final nombresBD = respuesta['nombres'] ?? '';
+          final apellidosBD = respuesta['apellidos'] ?? '';
+          final nombreCompleto = '$nombresBD $apellidosBD'.trim();
+          
+          if (nombreCompleto.isNotEmpty) {
+            nombreVendedor = nombreCompleto;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error al cargar nombre del vendedor: $e');
+      }
+    }
+
+    if (!mounted) return; 
 
     await showDialog<void>(
       context: context,
@@ -208,7 +235,9 @@ class _VentaViewState extends State<VentaView> {
               Text('Precio: Bs ${precio.isEmpty ? '-' : precio}'),
               Text('Fecha venta: $fecha'),
               Text('Estado: ${estado.isEmpty ? '-' : estado}'),
-              Text('Vendedor ID: ${vendedor.isEmpty ? '-' : vendedor}'),
+              // mostramos el nombre completo del vendedor
+              Text('Vendedor: ${nombreVendedor.isEmpty ? '-' : nombreVendedor}',
+              ),
             ],
           ),
           actions: [
@@ -225,6 +254,9 @@ class _VentaViewState extends State<VentaView> {
   Future<void> _registrarVenta({
     required String nombreComprador,
     required String ciComprador,
+    required String origen,  
+    required String destino,  
+    required double precio,
   }) async {
     if (_viajeSeleccionado == null || _viajeSeleccionado!.fkBus == null) {
       throw 'Debes seleccionar un viaje válido.';
@@ -236,15 +268,16 @@ class _VentaViewState extends State<VentaView> {
     }
 
     final sesion = await _sessionService.leerSesion();
-    final precioUnitario = _precioUnitarioActual();
 
     await _boletoController.registrarVenta(
       viajeId: _viajeSeleccionado!.id,
       asientos: seleccionados,
       nombrePasajero: nombreComprador,
       ciPasajero: ciComprador,
-      precioUnitario: precioUnitario,
+      precioUnitario: precio,
       vendedorId: sesion?.usuarioId,
+      origen: origen,
+      destino: destino,     
     );
 
     final resultados = await Future.wait([
@@ -262,24 +295,39 @@ class _VentaViewState extends State<VentaView> {
     });
   }
 
+  
+  // registrar venta
   Future<void> _mostrarModalRegistrarVenta() async {
     final seleccionados = _asientosSeleccionados();
-    if (seleccionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona al menos un asiento.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    if (seleccionados.isEmpty) return;
+
+    final List<String> paradas = [
+      'Quillacollo',
+      'Peñas',
+      'calientes',
+      'Laca laca',
+      'Choro',
+      'Tetillas',
+      'Jatum pampa',
+      'falsuri',
+      'San Cristóbal',
+      'Quebrada',
+      'Maravillas',
+      'Justiciado',
+      'Sequerrancho',
+      'SantoDomingo',
+    ];
+
+    String origenSeleccionado = paradas.first;
+    String destinoSeleccionado = paradas.last;
 
     final nombreCtrl = TextEditingController();
     final ciCtrl = TextEditingController();
-    final asientosTexto =
-        seleccionados.map((a) => a.numero.toString()).join(', ');
-    final precioUnitario = _precioUnitarioActual();
-    final total = precioUnitario * seleccionados.length;
+  
+    final precioBase = _precioUnitarioActual();
+    final precioCtrl = TextEditingController(text: precioBase.toStringAsFixed(2));
+
+    final asientosTexto = seleccionados.map((a) => a.numero.toString()).join(', ');
 
     await showDialog<void>(
       context: context,
@@ -288,6 +336,9 @@ class _VentaViewState extends State<VentaView> {
         bool guardando = false;
         return StatefulBuilder(
           builder: (context, setModalState) {
+            double precioEscrito = double.tryParse(precioCtrl.text) ?? 0.0;
+            double total = precioEscrito * seleccionados.length;
+
             return AlertDialog(
               title: const Text('Registrar venta'),
               content: SingleChildScrollView(
@@ -298,103 +349,90 @@ class _VentaViewState extends State<VentaView> {
                     TextField(
                       controller: nombreCtrl,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre del comprador',
-                      ),
+                      decoration: const InputDecoration(labelText: 'Nombre del comprador'),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: ciCtrl,
-                      keyboardType: TextInputType.text,
-                      decoration: const InputDecoration(
-                        labelText: 'CI del comprador',
-                      ),
+                      decoration: const InputDecoration(labelText: 'CI del comprador'),
                     ),
                     const SizedBox(height: 14),
-                    Text('Asientos: $asientosTexto'),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Precio unitario: Bs ${precioUnitario.toStringAsFixed(2)}',
+
+                    // editar precio
+                    TextField(
+                      controller: precioCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Precio por asiento (Bs)',
+                        prefixText: 'Bs ',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        // forzamos a que el total se actualice mientras escriben
+                        setModalState(() {}); 
+                      },
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 14),
+
+                    DropdownButtonFormField<String>(
+                      value: origenSeleccionado,
+                      decoration: const InputDecoration(labelText: 'Sube en'),
+                      items: paradas.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                      onChanged: (v) => setModalState(() => origenSeleccionado = v!),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: destinoSeleccionado,
+                      decoration: const InputDecoration(labelText: 'Baja en'),
+                      items: paradas.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                      onChanged: (v) => setModalState(() => destinoSeleccionado = v!),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Text('Asientos: $asientosTexto'),
                     Text(
                       'Total a pagar: Bs ${total.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      seleccionados.length == 1
-                          ? 'Se registrara 1 boleto para el asiento seleccionado.'
-                          : 'Se registraran ${seleccionados.length} boletos, uno por cada asiento seleccionado.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ],
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed: guardando
-                      ? null
-                      : () {
-                          Navigator.of(contextoModal).pop();
-                        },
+                  onPressed: guardando ? null : () => Navigator.of(contextoModal).pop(),
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                  onPressed: guardando
-                      ? null
-                      : () async {
-                          final nombre = nombreCtrl.text.trim();
-                          final ci = ciCtrl.text.trim();
+                  onPressed: guardando ? null : () async {
+                    final nombre = nombreCtrl.text.trim();
+                    final ci = ciCtrl.text.trim();
+                    final precioFinal = double.tryParse(precioCtrl.text) ?? 0.0;
 
-                          if (nombre.isEmpty || ci.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Completa nombre y CI.'),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-                            return;
-                          }
+                    if (nombre.isEmpty || ci.isEmpty || precioFinal <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Completa todos los datos y el precio.')),
+                      );
+                      return;
+                    }
 
-                          setModalState(() => guardando = true);
-                          try {
-                            await _registrarVenta(
-                              nombreComprador: nombre,
-                              ciComprador: ci,
-                            );
-                            if (!mounted) return;
-                            Navigator.of(contextoModal).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Venta registrada correctamente.'),
-                                backgroundColor: Color(0xFF638541),
-                              ),
-                            );
-                          } catch (e) {
-                            setModalState(() => guardando = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e.toString()),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF638541),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: guardando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Confirmar venta'),
+                    setModalState(() => guardando = true);
+                    try {
+                      await _registrarVenta(
+                        nombreComprador: nombre,
+                        ciComprador: ci,
+                        origen: origenSeleccionado,
+                        destino: destinoSeleccionado,
+                        precio: precioFinal,
+                      );
+                      if (!mounted) return;
+                      Navigator.of(contextoModal).pop();
+                    } catch (e) {
+                      setModalState(() => guardando = false);
+                      // Manejar error...
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF638541), foregroundColor: Colors.white),
+                  child: guardando ? const CircularProgressIndicator() : const Text('Confirmar venta'),
                 ),
               ],
             );
@@ -443,10 +481,8 @@ class _VentaViewState extends State<VentaView> {
       );
     }
 
-    // Ordena asientos por número
     final asientosOrdenados = [..._asientos]..sort((a, b) => a.numero.compareTo(b.numero));
 
-    // Agrupa asientos por fila (4 asientos por fila: 1-4, 5-8, etc.)
     final Map<int, List<AsientoModel>> porFila = {};
     for (final asiento in asientosOrdenados) {
       final fila = asiento.fila;
@@ -671,14 +707,14 @@ class _VentaViewState extends State<VentaView> {
                   children: [
                     if (_viajeSeleccionado == null) ...[
                       const Text(
-                        'VIAJES DE HOY',
+                        'VIAJES PROGRAMADOS O EN MARCHA',
                         style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                       ),
                       const SizedBox(height: 8),
                       if (_viajesHoy.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No hay viajes para hoy.'),
+                          child: Text('No hay viajes PROGRAMADOS O EN MARCHA.'),
                         )
                       else
                         ..._viajesHoy.map(_buildItemViaje),

@@ -3,9 +3,7 @@ import '../models/viaje_model.dart';
 
 class ViajeController {
   final _supabase = Supabase.instance.client;
-
-  String _hoy() => DateTime.now().toIso8601String().split('T').first;
-
+  
   //para la pantalla de Ventas: Busca el único viaje 'Activo'
   Future<ViajeModel?> obtenerViajeActivo() async {
     try {
@@ -50,7 +48,6 @@ class ViajeController {
     }
   }
 
-  // finalizar manualmente
   Future<void> finalizarViajeActivo() async {
     try {
       await _supabase
@@ -62,19 +59,21 @@ class ViajeController {
     }
   }
 
-  Future<List<ViajeModel>> obtenerViajesDeHoy() async {
+  Future<List<ViajeModel>> obtenerViajesActivos() async {
     try {
       final data = await _supabase
           .from('viajes')
           .select('id, fk_bus, fk_admin, fk_ruta, fecha_salida, hora_salida, estado, rutas(origen, destino)')
-          .eq('fecha_salida', _hoy())
+          .neq('estado', 'Finalizado') 
+          // ordenamos primero por fecha y luego por hora para que salgan en orden lógico
+          .order('fecha_salida') 
           .order('hora_salida');
 
       return (data as List)
           .map((map) => ViajeModel.fromMap(map as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      throw 'Error al cargar viajes de hoy: $e';
+      throw 'Error al cargar viajes activos: $e';
     }
   }
 
@@ -83,18 +82,29 @@ class ViajeController {
       final data = await _supabase
           .from('viajes')
           .select('id, fk_bus, fk_admin, fk_ruta, fecha_salida, hora_salida, estado, rutas(origen, destino)')
-          .lt('fecha_salida', _hoy())
-          .order('fecha_salida', ascending: false)
+          // Filtramos estrictamente por la palabra 'Finalizado'
+          .eq('estado', 'Finalizado') 
+          // Ordenamos 'false' para que muestre los más recientes arriba
+          .order('fecha_salida', ascending: false) 
           .order('hora_salida', ascending: false);
 
       return (data as List)
           .map((map) => ViajeModel.fromMap(map as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      throw 'Error al cargar historial de viajes: $e';
+      throw 'Error al cargar el historial: $e';
     }
   }
-
+  Future<void> actualizarEstadoViaje(int idViaje, String nuevoEstado) async {
+    try {
+      await _supabase
+          .from('viajes')
+          .update({'estado': nuevoEstado})
+          .eq('id', idViaje);
+    } catch (e) {
+      throw 'No se pudo actualizar el estado: $e';
+    }
+  }
   Future<void> crearViaje({
     required int idRuta,
     required int idAdmin,
