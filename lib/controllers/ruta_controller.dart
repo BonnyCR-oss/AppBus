@@ -25,4 +25,20 @@ class RutaController {
       throw 'No se pudo actualizar el precio: $e';
     }
   }
+
+  Future<void> crearRuta({
+    required String origen,
+    required String destino,
+    required double precio,
+  }) async {
+    try {
+      await _supabase.from('rutas').insert({
+        'origen': origen,
+        'destino': destino,
+        'precio': precio,
+      });
+    } catch (e) {
+      throw 'No se pudo crear la ruta: $e';
+    }
+  }
 }

@@ -65,6 +65,7 @@ class _LoginViewState extends State<LoginView> {
         nombreUsuario: usuario.nombreCompleto,
         contactoUsuario: usuario.email,
         rolUsuarioId: usuario.fkRol,
+        usuarioId: usuario.id,
       );
 
       if (!mounted) return;

@@ -5,6 +5,7 @@ import '../widgets/bottom_navbar.dart';
 import 'bus_photos_view.dart';
 import 'login_view.dart';
 import 'rutas_view.dart';
+import 'viajes_view.dart';
 import 'venta_view.dart';
 import 'usuarios_list_view.dart';
 
@@ -60,12 +61,21 @@ class _MainShellState extends State<MainShell> {
       ),
     );
 
+    // Viajes (por implementar)
+    _navItems.add(
+      BottomNavItem(
+        label: 'Viajes',
+        icon: Icons.route_outlined,
+        onTap: () => setState(() => _currentIndex = 2),
+      ),
+    );
+
     // Galería (siempre disponible)
     _navItems.add(
       BottomNavItem(
         label: 'Galería',
         icon: Icons.photo_library_outlined,
-        onTap: () => setState(() => _currentIndex = 2),
+        onTap: () => setState(() => _currentIndex = 3),
       ),
     );
 
@@ -75,7 +85,7 @@ class _MainShellState extends State<MainShell> {
         BottomNavItem(
           label: 'Admin',
           icon: Icons.admin_panel_settings_outlined,
-          onTap: () => setState(() => _currentIndex = 3),
+          onTap: () => setState(() => _currentIndex = 4),
         ),
       );
     }
@@ -86,10 +96,12 @@ class _MainShellState extends State<MainShell> {
       case 0:
         return const VentaView();
       case 1:
-        return const RutasView();
+        return RutasView(esAdmin: _esDueno);
       case 2:
-        return const BusPhotosView();
+        return ViajesView(esAdmin: _esDueno);
       case 3:
+        return const BusPhotosView();
+      case 4:
         if (_esDueno) return const UsuariosListView();
         return const VentaView();
       default:

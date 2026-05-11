@@ -4,6 +4,7 @@ import '../widgets/bottom_navbar.dart';
 import 'bus_photos_view.dart';
 import 'login_view.dart';
 import 'rutas_view.dart';
+import 'viajes_view.dart';
 import 'venta_view.dart';
 import 'usuarios_list_view.dart';
 
@@ -67,7 +68,21 @@ class _DashboardViewState extends State<DashboardView> {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const RutasView()),
+            MaterialPageRoute(builder: (_) => RutasView(esAdmin: _esDueno)),
+          );
+        },
+      ),
+    );
+
+    // Viajes para todos (pantalla vacía por ahora)
+    items.add(
+      BottomNavItem(
+        label: 'Viajes',
+        icon: Icons.route_outlined,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => ViajesView(esAdmin: _esDueno)),
           );
         },
       ),
@@ -228,7 +243,7 @@ class _DashboardViewState extends State<DashboardView> {
                 icon: Icons.map,
                 color: const Color(0xFF638541),
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const RutasView())),
+                  MaterialPageRoute(builder: (_) => RutasView(esAdmin: _esDueno))),
               ),
               const SizedBox(height: 24),
               _buildMenuActionButton(
