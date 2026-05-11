@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/ruta_controller.dart';
 import '../controllers/viaje_controller.dart';
@@ -26,9 +27,55 @@ class _ViajesViewState extends State<ViajesView> {
 
   List<ViajeModel> _viajesHoy = [];
   List<ViajeModel> _historial = [];
+  List<ViajeModel> _historialHoy = [];
+  List<ViajeModel> _historialAyer = [];
+  List<ViajeModel> _historialFiltrado = [];
   List<RutaModel> _rutas = [];
   bool _cargando = true;
   int? _usuarioId;
+  DateTime? _fechaFiltroHistorial;
+
+  Future<int?> _resolverAdminIdActual() async {
+    final sesion = await _sessionService.leerSesion();
+    if (sesion?.usuarioId != null) {
+      return sesion!.usuarioId;
+    }
+
+    final contacto = sesion?.contactoUsuario.trim();
+    if (contacto == null || contacto.isEmpty) return null;
+
+    try {
+      final data = await Supabase.instance.client
+          .from('usuarios')
+          .select('id')
+          .eq('email', contacto)
+          .maybeSingle();
+
+      if (data == null) return null;
+      final id = data['id'];
+      if (id is int) return id;
+      if (id is num) return id.toInt();
+      return int.tryParse(id?.toString() ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _fechaYMD(DateTime fecha) {
+    final y = fecha.year.toString().padLeft(4, '0');
+    final m = fecha.month.toString().padLeft(2, '0');
+    final d = fecha.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  void _recalcularListasHistorial() {
+    final hoy = DateTime.now();
+    final hoyYMD = _fechaYMD(hoy);
+    final ayerYMD = _fechaYMD(hoy.subtract(const Duration(days: 1)));
+
+    _historialHoy = _historial.where((v) => v.fechaSalida == hoyYMD).toList();
+    _historialAyer = _historial.where((v) => v.fechaSalida == ayerYMD).toList();
+  }
 
   @override
   void initState() {
@@ -39,19 +86,33 @@ class _ViajesViewState extends State<ViajesView> {
   Future<void> _cargarDatos() async {
     setState(() => _cargando = true);
     try {
-      final sesion = await _sessionService.leerSesion();
-      final viajesHoy = await _viajeController.obtenerViajesActivos();
-      final rutas = widget.esAdmin ? await _rutaController.obtenerRutas() : <RutaModel>[];
-      final historial = widget.esAdmin
-          ? await _viajeController.obtenerHistorialViajes()
-          : <ViajeModel>[];
+      final adminId = await _resolverAdminIdActual();
+      final resultados = await Future.wait([
+        _viajeController.obtenerViajesActivos(),
+        widget.esAdmin
+            ? _rutaController.obtenerRutas()
+            : Future.value(<RutaModel>[]),
+        widget.esAdmin
+            ? _viajeController.obtenerHistorialViajes()
+            : Future.value(<ViajeModel>[]),
+      ]);
+
+      final viajesActivos = resultados[0] as List<ViajeModel>;
+      final rutas = resultados[1] as List<RutaModel>;
+      final historial = resultados[2] as List<ViajeModel>;
+
+      final hoyYMD = _fechaYMD(DateTime.now());
+      final viajesHoy = viajesActivos.where((v) => v.fechaSalida == hoyYMD).toList();
 
       if (!mounted) return;
       setState(() {
-        _usuarioId = sesion?.usuarioId;
+        _usuarioId = adminId;
         _viajesHoy = viajesHoy;
         _rutas = rutas;
         _historial = historial;
+        _fechaFiltroHistorial = null;
+        _historialFiltrado = [];
+        _recalcularListasHistorial();
       });
     } catch (e) {
       if (!mounted) return;
@@ -174,19 +235,64 @@ class _ViajesViewState extends State<ViajesView> {
     );
   }
 
-  Future<void> _mostrarDialogoCrearViaje() async {
-    if (_usuarioId == null) {
+  Future<void> _filtrarHistorialPorFecha() async {
+    final seleccion = await showDatePicker(
+      context: context,
+      initialDate: _fechaFiltroHistorial ?? DateTime.now().subtract(const Duration(days: 2)),
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime.now(),
+    );
+
+    if (seleccion == null) return;
+
+    setState(() => _cargando = true);
+    try {
+      final fechaStr = _fechaYMD(seleccion);
+      final filtrados = await _viajeController.obtenerHistorialViajesPorFecha(fechaStr);
+      if (!mounted) return;
+
+      setState(() {
+        _fechaFiltroHistorial = seleccion;
+        _historialFiltrado = filtrados;
+      });
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  void _limpiarFiltroHistorial() {
+    setState(() {
+      _fechaFiltroHistorial = null;
+      _historialFiltrado = [];
+    });
+  }
+
+  Future<void> _mostrarDialogoCrearViaje() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final adminId = _usuarioId ?? await _resolverAdminIdActual();
+    if (!mounted) return;
+
+    if (adminId == null) {
+      messenger.showSnackBar(
         const SnackBar(
-          content: Text('No se pudo identificar al admin actual. Cierra sesión e inicia de nuevo.'),
+          content: Text('No se pudo verificar quién es el admin actual. Cierra sesión e inicia de nuevo.'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
+    if (_usuarioId != adminId && mounted) {
+      setState(() => _usuarioId = adminId);
+    }
+
     if (_rutas.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('No hay rutas disponibles para crear viajes.'),
           backgroundColor: Colors.red,
@@ -198,7 +304,6 @@ class _ViajesViewState extends State<ViajesView> {
     int rutaId = _rutas.first.id;
     DateTime fecha = DateTime.now();
     TimeOfDay hora = TimeOfDay.now();
-    final busCtrl = TextEditingController(text: '1');
 
     await showDialog(
       context: context,
@@ -255,13 +360,6 @@ class _ViajesViewState extends State<ViajesView> {
                     }
                   },
                 ),
-                TextField(
-                  controller: busCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'ID de bus',
-                  ),
-                ),
               ],
             ),
           ),
@@ -273,16 +371,7 @@ class _ViajesViewState extends State<ViajesView> {
             ElevatedButton(
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(this.context);
-                final busId = int.tryParse(busCtrl.text.trim());
-                if (busId == null || busId <= 0) {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Ingresa un ID de bus válido.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
+                const busId = 1;
 
                 // Validar que la fecha y hora no sean pasadas
                 final ahora = DateTime.now();
@@ -324,7 +413,7 @@ class _ViajesViewState extends State<ViajesView> {
                 try {
                   await _viajeController.crearViaje(
                     idRuta: rutaId,
-                    idAdmin: _usuarioId!,
+                    idAdmin: adminId,
                     idBus: busId,
                     fechaSalida: fechaStr,
                     horaSalida: horaStr,
@@ -391,14 +480,71 @@ class _ViajesViewState extends State<ViajesView> {
                       const SizedBox(height: 20),
                       const Divider(),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'HISTORIAL (HOY Y AYER)',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _filtrarHistorialPorFecha,
+                            icon: const Icon(Icons.filter_alt_outlined, size: 18),
+                            label: const Text('Filtrar fecha'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_fechaFiltroHistorial != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF5E9),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Filtro aplicado: ${_fechaYMD(_fechaFiltroHistorial!)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _limpiarFiltroHistorial,
+                                child: const Text('Quitar filtro'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildListaViajes(
+                          _historialFiltrado,
+                          emptyText: 'No hay viajes en la fecha seleccionada.',
+                          esHistorial: true,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       const Text(
-                        'HISTORIAL DE VIAJES ANTERIORES',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                        'Hoy',
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       _buildListaViajes(
-                        _historial,
-                        emptyText: 'No hay viajes anteriores en el historial.',
+                        _historialHoy,
+                        emptyText: 'No hay viajes finalizados hoy.',
+                        esHistorial: true,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Ayer',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildListaViajes(
+                        _historialAyer,
+                        emptyText: 'No hay viajes finalizados ayer.',
                         esHistorial: true,
                       ),
                     ],

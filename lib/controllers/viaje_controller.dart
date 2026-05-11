@@ -95,6 +95,25 @@ class ViajeController {
       throw 'Error al cargar el historial: $e';
     }
   }
+
+  Future<List<ViajeModel>> obtenerHistorialViajesPorFecha(String fechaSalida) async {
+    try {
+      final data = await _supabase
+          .from('viajes')
+          .select(
+              'id, fk_bus, fk_admin, fk_ruta, fecha_salida, hora_salida, estado, rutas(origen, destino)')
+          .eq('estado', 'Finalizado')
+          .eq('fecha_salida', fechaSalida)
+          .order('hora_salida', ascending: false);
+
+      return (data as List)
+          .map((map) => ViajeModel.fromMap(map as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw 'Error al filtrar historial por fecha: $e';
+    }
+  }
+
   Future<void> actualizarEstadoViaje(int idViaje, String nuevoEstado) async {
     try {
       await _supabase

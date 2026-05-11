@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -27,11 +29,20 @@ class _VentaViewState extends State<VentaView> {
   bool _cargandoViajes = true;
   bool _cargandoAsientos = false;
   List<ViajeModel> _viajesHoy = [];
+  Map<String, List<ViajeModel>> _viajesPorFecha = {};
   List<RutaModel> _rutas = [];
   List<AsientoModel> _asientos = [];
   Map<int, Map<String, dynamic>> _detalleBoletoPorAsiento = {};
   final Set<int> _asientosSeleccionadosIds = <int>{};
   ViajeModel? _viajeSeleccionado;
+  RealtimeChannel? _suscripcionBoletosEnTiempoReal;
+  RealtimeChannel? _suscripcionAsientosBloqueados;
+  Timer? _timerSincronizacion;
+  List<int> _asientosBloqueados = [];
+  int? _usuarioActualId;
+  bool _sincronizandoBoletos = false;
+  bool _sincronizandoBloqueos = false;
+  DateTime? _ultimoAvisoAsientoBloqueado;
 
   Widget _buildCampoDetalle({
     required IconData icon,
@@ -79,7 +90,36 @@ class _VentaViewState extends State<VentaView> {
   @override
   void initState() {
     super.initState();
+    _cargarUsuarioActual();
     _cargarViajesHoy();
+  }
+
+  Future<void> _cargarUsuarioActual() async {
+    final sesion = await _sessionService.leerSesion();
+    if (!mounted) return;
+    setState(() => _usuarioActualId = sesion?.usuarioId);
+  }
+
+  @override
+  void dispose() {
+    // Desbloquear todos los asientos que estaban seleccionados
+    if (_viajeSeleccionado != null) {
+      final sesion = _sessionService.leerSesion();
+      sesion.then((s) {
+        if (s != null) {
+          _asientoController.desbloquearTodosEnViaje(
+            viajeId: _viajeSeleccionado!.id,
+            vendedorId: s.usuarioId,
+          );
+        }
+      });
+    }
+
+    // Limpiar suscripciones
+    _timerSincronizacion?.cancel();
+    _suscripcionBoletosEnTiempoReal?.unsubscribe();
+    _suscripcionAsientosBloqueados?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _cargarViajesHoy() async {
@@ -92,8 +132,28 @@ class _VentaViewState extends State<VentaView> {
       final viajes = resultados[0] as List<ViajeModel>;
       final rutas = resultados[1] as List<RutaModel>;
       if (!mounted) return;
+
+      // Separar viajes de hoy vs futuro
+      final hoy = _obtenerFechaHoy();
+      final viajesHoy = <ViajeModel>[];
+      final viajesPorFecha = <String, List<ViajeModel>>{};
+
+      for (final viaje in viajes) {
+        if (viaje.fechaSalida == hoy) {
+          viajesHoy.add(viaje);
+        } else if (viaje.fechaSalida.compareTo(hoy) > 0) {
+          viajesPorFecha.putIfAbsent(viaje.fechaSalida, () => []).add(viaje);
+        }
+      }
+
+      // Ordenar viajes dentro de cada fecha
+      for (final lista in viajesPorFecha.values) {
+        lista.sort((a, b) => a.horaSalida.compareTo(b.horaSalida));
+      }
+
       setState(() {
-        _viajesHoy = viajes;
+        _viajesHoy = viajesHoy;
+        _viajesPorFecha = viajesPorFecha;
         _rutas = rutas;
       });
     } catch (e) {
@@ -117,26 +177,43 @@ class _VentaViewState extends State<VentaView> {
       return;
     }
 
+    // Limpiar suscripciones anteriores
+    _timerSincronizacion?.cancel();
+    await _suscripcionBoletosEnTiempoReal?.unsubscribe();
+    await _suscripcionAsientosBloqueados?.unsubscribe();
+
     setState(() {
       _viajeSeleccionado = viaje;
       _cargandoAsientos = true;
       _asientos = [];
       _detalleBoletoPorAsiento = {};
       _asientosSeleccionadosIds.clear();
+      _asientosBloqueados = [];
     });
 
     try {
       final resultados = await Future.wait([
         _asientoController.obtenerAsientosPorBus(viaje.fkBus!),
         _boletoController.obtenerDetalleBoletosPorViaje(viaje.id),
+        _asientoController.obtenerAsientosBloqueados(
+          viaje.id,
+          excluirVendedorId: _usuarioActualId,
+        ),
       ]);
       final asientos = resultados[0] as List<AsientoModel>;
       final detalleBoletos = resultados[1] as Map<int, Map<String, dynamic>>;
+      final bloqueados = resultados[2] as List<int>;
       if (!mounted) return;
       setState(() {
         _asientos = asientos;
         _detalleBoletoPorAsiento = detalleBoletos;
+        _asientosBloqueados = bloqueados;
       });
+
+      // Escuchar cambios en tiempo real
+      _escucharCambiosEnBoletos(viaje.id);
+      _escucharCambiosEnAsientosBloqueados(viaje.id);
+      _iniciarSincronizacionPeriodica();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -147,24 +224,193 @@ class _VentaViewState extends State<VentaView> {
     }
   }
 
+  void _escucharCambiosEnBoletos(int viajeId) {
+    _suscripcionBoletosEnTiempoReal = Supabase.instance.client
+        .channel('boletos_viaje_$viajeId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'boletos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'fk_viaje',
+            value: viajeId.toString(),
+          ),
+          callback: (payload) {
+            // Nuevo boleto insertado, actualizar detalles
+            _actualizarAsientosDisponibes();
+          },
+        )
+        .subscribe();
+  }
+
+  void _escucharCambiosEnAsientosBloqueados(int viajeId) {
+    _suscripcionAsientosBloqueados = Supabase.instance.client
+        .channel('asientos_bloqueados_viaje_$viajeId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'asientos_bloqueados',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'fk_viaje',
+            value: viajeId.toString(),
+          ),
+          callback: (payload) {
+            // Se bloqueó/desbloqueó un asiento, actualizar lista
+            _actualizarAsientosBloqueados();
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _actualizarAsientosBloqueados() async {
+    if (_viajeSeleccionado == null || _sincronizandoBloqueos) return;
+    _sincronizandoBloqueos = true;
+    try {
+      final bloqueados = await _asientoController
+          .obtenerAsientosBloqueados(
+            _viajeSeleccionado!.id,
+            excluirVendedorId: _usuarioActualId,
+          );
+      if (!mounted) return;
+
+      if (!_mismaListaDeAsientos(_asientosBloqueados, bloqueados)) {
+        setState(() {
+          _asientosBloqueados = bloqueados;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error actualizando asientos bloqueados: $e');
+    } finally {
+      _sincronizandoBloqueos = false;
+    }
+  }
+
+  void _iniciarSincronizacionPeriodica() {
+    _timerSincronizacion?.cancel();
+    _timerSincronizacion = Timer.periodic(const Duration(seconds: 3), (_) {
+      _actualizarAsientosDisponibes();
+      _actualizarAsientosBloqueados();
+    });
+  }
+
+  bool _mismaListaDeAsientos(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    final setA = a.toSet();
+    final setB = b.toSet();
+    return setA.length == setB.length && setA.containsAll(setB);
+  }
+
+  Future<void> _actualizarAsientosDisponibes() async {
+    if (_viajeSeleccionado == null || _sincronizandoBoletos) return;
+    _sincronizandoBoletos = true;
+    try {
+      final detalleBoletos = await _boletoController
+          .obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id);
+      if (!mounted) return;
+
+      // Verificar si algún asiento seleccionado fue vendido
+      final asientosAhoraVendidos = <int>[];
+      for (final asientoId in _asientosSeleccionadosIds) {
+        if (detalleBoletos.containsKey(asientoId)) {
+          asientosAhoraVendidos.add(asientoId);
+        }
+      }
+
+      if (_detalleBoletoPorAsiento.length != detalleBoletos.length) {
+        setState(() {
+          _detalleBoletoPorAsiento = detalleBoletos;
+        });
+      }
+
+      // Si algún asiento fue vendido, mostrar advertencia
+      if (asientosAhoraVendidos.isNotEmpty) {
+        final asientosText = asientosAhoraVendidos.join(', ');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        // Deseleccionar los asientos vendidos
+        setState(() {
+          for (final asientoId in asientosAhoraVendidos) {
+            _asientosSeleccionadosIds.remove(asientoId);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error actualizando asientos: $e');
+    } finally {
+      _sincronizandoBoletos = false;
+    }
+  }
+
   String _formatearHora(String hora) {
     final partes = hora.split(':');
     if (partes.length < 2) return hora;
     return '${partes[0]}:${partes[1]}';
   }
 
+  String _obtenerFechaHoy() {
+    final hoy = DateTime.now();
+    return '${hoy.year.toString().padLeft(4, '0')}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatearFechaDisplay(String fechaISO) {
+    try {
+      final fecha = DateTime.parse(fechaISO);
+      final hoy = DateTime.now();
+      final manana = hoy.add(const Duration(days: 1));
+
+      final hoyISO = '${hoy.year.toString().padLeft(4, '0')}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+      final mananaISO = '${manana.year.toString().padLeft(4, '0')}-${manana.month.toString().padLeft(2, '0')}-${manana.day.toString().padLeft(2, '0')}';
+
+      if (fechaISO == hoyISO) return 'HOY';
+      if (fechaISO == mananaISO) return 'MANANA';
+
+      final meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      final dias = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+
+      return '${dias[fecha.weekday % 7]} ${fecha.day} de ${meses[fecha.month]}';
+    } catch (e) {
+      return fechaISO;
+    }
+  }
+
   Color _colorAsiento(AsientoModel asiento) {
+    // Primero verificar si está vendido (rojo)
     final tieneBoletoEnViaje = _detalleBoletoPorAsiento.containsKey(asiento.id);
     if (tieneBoletoEnViaje) return Colors.red;
 
+    // Luego verificar si está bloqueado por otro vendedor (amarillo/naranja)
+    final estaBloqueado = _asientosBloqueados.contains(asiento.id);
+    if (estaBloqueado) return Colors.amber;
+
+    // Luego verificar estado (gris si inactivo/mantenimiento)
     final estado = asiento.estado.toLowerCase();
     if (estado == 'mantenimiento' || estado == 'inactivo') return Colors.grey;
+
+    // Si está seleccionado por este usuario (verde claro)
+    if (_asientosSeleccionadosIds.contains(asiento.id)) {
+      return const Color(0xFF638541);
+    }
+
+    // Disponible (verde)
     return const Color(0xFF638541);
   }
 
   bool _asientoBloqueadoPorEstado(AsientoModel asiento) {
     final estado = asiento.estado.toLowerCase();
     return estado == 'mantenimiento' || estado == 'inactivo';
+  }
+
+  bool _asientoBloqueadoPorOtroUsuario(AsientoModel asiento) {
+    return _asientosBloqueados.contains(asiento.id);
   }
 
   double _precioUnitarioActual() {
@@ -178,6 +424,27 @@ class _VentaViewState extends State<VentaView> {
     return 0;
   }
 
+  int _cantidadVendidos() {
+    return _detalleBoletoPorAsiento.length;
+  }
+
+  int _cantidadReservados() {
+    return _asientosBloqueados.length;
+  }
+
+  int _cantidadInactivos() {
+    return _asientos
+        .where((a) => _asientoBloqueadoPorEstado(a))
+        .length;
+  }
+
+  int _cantidadDisponibles() {
+    final noDisponibles =
+        _cantidadVendidos() + _cantidadReservados() + _cantidadInactivos();
+    final disponibles = _asientos.length - noDisponibles;
+    return disponibles < 0 ? 0 : disponibles;
+  }
+
   List<AsientoModel> _asientosSeleccionados() {
     final seleccionados = _asientos
         .where((a) => _asientosSeleccionadosIds.contains(a.id))
@@ -186,17 +453,51 @@ class _VentaViewState extends State<VentaView> {
     return seleccionados;
   }
 
-  void _toggleSeleccionAsiento(AsientoModel asiento) {
+  void _toggleSeleccionAsiento(AsientoModel asiento) async {
     if (_detalleBoletoPorAsiento.containsKey(asiento.id)) return;
     if (_asientoBloqueadoPorEstado(asiento)) return;
+    if (_asientoBloqueadoPorOtroUsuario(asiento)) {
+      final ahora = DateTime.now();
+      final puedeAvisar = _ultimoAvisoAsientoBloqueado == null ||
+          ahora.difference(_ultimoAvisoAsientoBloqueado!).inMilliseconds > 1200;
+      if (!puedeAvisar) return;
+      _ultimoAvisoAsientoBloqueado = ahora;
 
-    setState(() {
-      if (_asientosSeleccionadosIds.contains(asiento.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este asiento está siendo seleccionado por otro vendedor'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_usuarioActualId == null) {
+      await _cargarUsuarioActual();
+      if (_usuarioActualId == null) return;
+    }
+
+    if (_asientosSeleccionadosIds.contains(asiento.id)) {
+      // Deseleccionar y desbloquear
+      setState(() {
         _asientosSeleccionadosIds.remove(asiento.id);
-      } else {
+      });
+      await _asientoController.desbloquearAsiento(
+        asientoId: asiento.id,
+        viajeId: _viajeSeleccionado!.id,
+        vendedorId: _usuarioActualId,
+      );
+    } else {
+      // Seleccionar y bloquear
+      setState(() {
         _asientosSeleccionadosIds.add(asiento.id);
-      }
-    });
+      });
+      await _asientoController.bloquearAsiento(
+        asientoId: asiento.id,
+        viajeId: _viajeSeleccionado!.id,
+        vendedorId: _usuarioActualId,
+      );
+    }
   }
 
   String _nombreVisibleComprador(AsientoModel asiento) {
@@ -381,9 +682,59 @@ class _VentaViewState extends State<VentaView> {
       _detalleBoletoPorAsiento = detalleBoletos;
       _asientosSeleccionadosIds.clear();
     });
+
+    await _asientoController.desbloquearAsientosVendidos(
+      viajeId: _viajeSeleccionado!.id,
+      asientosIds: seleccionados.map((a) => a.id).toList(),
+    );
   }
 
   
+  bool _esNombreValido(String nombre) {
+    if (nombre.isEmpty) return false;
+    // Solo letras y espacios
+    return RegExp(r"^[a-záéíóúàèìòùäëïöüñ\s]+$", caseSensitive: false)
+        .hasMatch(nombre);
+  }
+
+  bool _esCIValido(String ci) {
+    if (ci.isEmpty) return false;
+    // Solo números
+    if (!RegExp(r"^\d+$").hasMatch(ci)) return false;
+    // Entre 8 y 14 dígitos
+    return ci.length >= 8 && ci.length <= 14;
+  }
+
+  bool _esPrecioValido(String precio) {
+    if (precio.isEmpty) return false;
+    final precioNum = double.tryParse(precio);
+    return precioNum != null && precioNum > 0;
+  }
+
+  String _obtenerErrorNombre(String nombre) {
+    if (nombre.isEmpty) return 'Ingresa el nombre del comprador';
+    if (!_esNombreValido(nombre)) return 'Solo letras y espacios permitidos';
+    return '';
+  }
+
+  String _obtenerErrorCI(String ci) {
+    if (ci.isEmpty) return 'Ingresa el CI';
+    if (!RegExp(r"^\d+$").hasMatch(ci)) return 'Solo números permitidos';
+    if (ci.length < 8) return 'CI debe tener mínimo 8 dígitos';
+    if (ci.length > 14) return 'CI debe tener máximo 14 dígitos';
+    return '';
+  }
+
+  String _obtenerErrorPrecio(String precio) {
+    if (precio.isEmpty) return 'Ingresa el precio';
+    if (!RegExp(r"^\d+(\.\d{1,2})?$").hasMatch(precio)) {
+      return 'Solo números y decimales permitidos';
+    }
+    final precioNum = double.tryParse(precio);
+    if (precioNum == null || precioNum <= 0) return 'Precio debe ser mayor a 0';
+    return '';
+  }
+
   // registrar venta
   Future<void> _mostrarModalRegistrarVenta() async {
     final seleccionados = _asientosSeleccionados();
@@ -427,6 +778,11 @@ class _VentaViewState extends State<VentaView> {
             double precioEscrito = double.tryParse(precioCtrl.text) ?? 0.0;
             double total = precioEscrito * seleccionados.length;
 
+            final nombreValido = _esNombreValido(nombreCtrl.text.trim());
+            final ciValido = _esCIValido(ciCtrl.text.trim());
+            final precioValido = _esPrecioValido(precioCtrl.text.trim());
+            final todosValidos = nombreValido && ciValido && precioValido;
+
             return AlertDialog(
               title: const Text('Registrar venta'),
               content: SingleChildScrollView(
@@ -437,31 +793,64 @@ class _VentaViewState extends State<VentaView> {
                     TextField(
                       controller: nombreCtrl,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Nombre del comprador'),
+                      decoration: InputDecoration(
+                        labelText: 'Nombre del comprador',
+                        errorText: nombreCtrl.text.isNotEmpty
+                            ? _obtenerErrorNombre(nombreCtrl.text.trim())
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: nombreCtrl.text.isNotEmpty && !nombreValido
+                                ? Colors.red
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                      ),
+                      onChanged: (_) => setModalState(() {}),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: ciCtrl,
-                      decoration: const InputDecoration(labelText: 'CI del comprador'),
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'CI del comprador (8-14 dígitos)',
+                        errorText: ciCtrl.text.isNotEmpty
+                            ? _obtenerErrorCI(ciCtrl.text.trim())
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: ciCtrl.text.isNotEmpty && !ciValido
+                                ? Colors.red
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                      ),
+                      onChanged: (_) => setModalState(() {}),
                     ),
-                    const SizedBox(height: 14),
-
-                    // editar precio
+                    const SizedBox(height: 12),
                     TextField(
                       controller: precioCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Precio por asiento (Bs)',
                         prefixText: 'Bs ',
-                        border: OutlineInputBorder(),
+                        errorText: precioCtrl.text.isNotEmpty
+                            ? _obtenerErrorPrecio(precioCtrl.text.trim())
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: precioCtrl.text.isNotEmpty && !precioValido
+                                ? Colors.red
+                                : Colors.grey[300]!,
+                          ),
+                        ),
                       ),
-                      onChanged: (value) {
-                        // forzamos a que el total se actualice mientras escriben
-                        setModalState(() {}); 
-                      },
+                      onChanged: (value) => setModalState(() {}),
                     ),
                     const SizedBox(height: 14),
-
                     DropdownButtonFormField<String>(
                       initialValue: origenSeleccionado,
                       decoration: const InputDecoration(labelText: 'Sube en'),
@@ -476,7 +865,6 @@ class _VentaViewState extends State<VentaView> {
                       onChanged: (v) => setModalState(() => destinoSeleccionado = v!),
                     ),
                     const SizedBox(height: 14),
-
                     Text('Asientos: $asientosTexto'),
                     Text(
                       'Total a pagar: Bs ${total.toStringAsFixed(2)}',
@@ -491,22 +879,42 @@ class _VentaViewState extends State<VentaView> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                  onPressed: guardando ? null : () async {
+                  onPressed: (guardando || !todosValidos) ? null : () async {
                     final messenger = ScaffoldMessenger.of(this.context);
                     final navigator = Navigator.of(contextoModal);
                     final nombre = nombreCtrl.text.trim();
                     final ci = ciCtrl.text.trim();
                     final precioFinal = double.tryParse(precioCtrl.text) ?? 0.0;
 
-                    if (nombre.isEmpty || ci.isEmpty || precioFinal <= 0) {
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('Completa todos los datos y el precio.')),
-                      );
-                      return;
-                    }
-
                     setModalState(() => guardando = true);
                     try {
+                      // Verificación final: asegurarse que los asientos siguen disponibles
+                      final detalleBoletos = await _boletoController
+                          .obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id);
+                      
+                      // Verificar si algún asiento fue vendido
+                      final asientosNoDisponibles = <int>[];
+                      for (final asientoId in _asientosSeleccionadosIds) {
+                        if (detalleBoletos.containsKey(asientoId)) {
+                          asientosNoDisponibles.add(asientoId);
+                        }
+                      }
+
+                      if (asientosNoDisponibles.isNotEmpty) {
+                        setModalState(() => guardando = false);
+                        final asientosText = asientosNoDisponibles.join(', ');
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor. Por favor, selecciona otros asientos.',
+                            ),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                        return;
+                      }
+
                       await _registrarVenta(
                         nombreComprador: nombre,
                         ciComprador: ci,
@@ -515,14 +923,32 @@ class _VentaViewState extends State<VentaView> {
                         precio: precioFinal,
                       );
                       if (!mounted) return;
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Venta registrada correctamente'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
                       navigator.pop();
                     } catch (e) {
                       setModalState(() => guardando = false);
-                      // Manejar error...
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Error: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF638541), foregroundColor: Colors.white),
-                  child: guardando ? const CircularProgressIndicator() : const Text('Confirmar venta'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: todosValidos
+                        ? const Color(0xFF638541)
+                        : Colors.grey[300],
+                    foregroundColor: Colors.white,
+                  ),
+                  child: guardando
+                      ? const CircularProgressIndicator()
+                      : const Text('Confirmar venta'),
                 ),
               ],
             );
@@ -584,25 +1010,32 @@ class _VentaViewState extends State<VentaView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildResumenChip('Disponibles', _cantidadDisponibles(), const Color(0xFF638541)),
+            _buildResumenChip('Vendidos', _cantidadVendidos(), Colors.red),
+            _buildResumenChip('Reservados', _cantidadReservados(), Colors.amber),
+            _buildResumenChip('Inactivos', _cantidadInactivos(), Colors.grey),
+          ],
+        ),
+        const SizedBox(height: 12),
         // Leyenda
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
           children: const [
-            Icon(Icons.airline_seat_recline_normal, color: Color(0xFF638541), size: 18),
-            SizedBox(width: 4),
-            Text('Disponible', style: TextStyle(fontSize: 12)),
-            SizedBox(width: 12),
-            Icon(Icons.airline_seat_recline_normal, color: Colors.red, size: 18),
-            SizedBox(width: 4),
-            Text('Ocupado', style: TextStyle(fontSize: 12)),
-            SizedBox(width: 12),
-            Icon(Icons.airline_seat_recline_normal, color: Colors.grey, size: 18),
-            SizedBox(width: 4),
-            Text('Inactivo', style: TextStyle(fontSize: 12)),
+            _LegendItem(color: Color(0xFF638541), texto: 'Disponible'),
+            _LegendItem(color: Colors.red, texto: 'Vendido'),
+            _LegendItem(color: Colors.amber, texto: 'Reservado'),
+            _LegendItem(color: Colors.grey, texto: 'Inactivo'),
+            _LegendItem(color: Colors.blue, texto: 'Seleccionado'),
           ],
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 460,
+          height: 500,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: InteractiveViewer(
@@ -636,7 +1069,7 @@ class _VentaViewState extends State<VentaView> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.arrow_upward, size: 16, color: Colors.grey[400]),
-                                  Text('PASILLO', style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                                  Text('PASILLO', style: TextStyle(fontSize: 8, color: Colors.grey[500])),
                                   Icon(Icons.arrow_downward, size: 16, color: Colors.grey[400]),
                                 ],
                               ),
@@ -680,17 +1113,13 @@ class _VentaViewState extends State<VentaView> {
                   Text(
                     'Total: Bs ${(_precioUnitarioActual() * _asientosSeleccionadosIds.length).toStringAsFixed(2)}',
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _mostrarModalRegistrarVenta,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF638541),
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.point_of_sale),
-                      label: const Text('Registrar venta'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Presiona "Confirmar venta" en la barra inferior.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -728,11 +1157,12 @@ class _VentaViewState extends State<VentaView> {
           }
           _toggleSeleccionAsiento(asiento);
         },
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
+          constraints: const BoxConstraints(minHeight: 54),
           decoration: BoxDecoration(
             color: fondo,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: bordeColor, width: seleccionado ? 2.2 : 1.5),
           ),
           child: Column(
@@ -741,7 +1171,7 @@ class _VentaViewState extends State<VentaView> {
               Icon(
                 Icons.airline_seat_recline_normal,
                 color: bordeColor,
-                size: 18,
+                size: 20,
               ),
               Text(
                 '${asiento.numero}',
@@ -765,7 +1195,7 @@ class _VentaViewState extends State<VentaView> {
               if (seleccionado)
                 const Icon(
                   Icons.check_circle,
-                  size: 10,
+                  size: 12,
                   color: Colors.blue,
                 ),
             ],
@@ -775,8 +1205,33 @@ class _VentaViewState extends State<VentaView> {
     );
   }
 
+  Widget _buildResumenChip(String titulo, int cantidad, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(120)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 9, color: color),
+          const SizedBox(width: 6),
+          Text(
+            '$titulo: $cantidad',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final totalSeleccionado =
+        _precioUnitarioActual() * _asientosSeleccionadosIds.length;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAF7),
       appBar: AppBar(
@@ -796,18 +1251,39 @@ class _VentaViewState extends State<VentaView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_viajeSeleccionado == null) ...[
-                      const Text(
-                        'VIAJES PROGRAMADOS O EN MARCHA',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_viajesHoy.isEmpty)
+                      // Sección de hoy
+                      if (_viajesHoy.isNotEmpty) ...[
+                        const Text(
+                          'VIAJES DE HOY',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        ..._viajesHoy.map(_buildItemViaje),
+                        const SizedBox(height: 16),
+                      ],
+                      // Secciones de viajes futuros agrupados por fecha
+                      ..._viajesPorFecha.entries.map((entry) {
+                        final fecha = entry.key;
+                        final viajes = entry.value;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'VIAJES - ${_formatearFechaDisplay(fecha).toUpperCase()}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            ...viajes.map(_buildItemViaje),
+                            const SizedBox(height: 16),
+                          ],
+                        );
+                      }),
+                      // Mensaje si no hay viajes en absoluto
+                      if (_viajesHoy.isEmpty && _viajesPorFecha.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No hay viajes PROGRAMADOS O EN MARCHA.'),
-                        )
-                      else
-                        ..._viajesHoy.map(_buildItemViaje),
+                          child: Text('No hay viajes disponibles.'),
+                        ),
                     ] else ...[
                       Card(
                         elevation: 1,
@@ -856,6 +1332,84 @@ class _VentaViewState extends State<VentaView> {
                 ),
               ),
             ),
+      bottomNavigationBar: _viajeSeleccionado != null &&
+              _asientosSeleccionadosIds.isNotEmpty
+          ? SafeArea(
+              minimum: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(14),
+                color: Colors.white,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFDDE6D3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_asientosSeleccionadosIds.length} asiento(s) seleccionados',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Total: Bs ${totalSeleccionado.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2F3A2A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: _mostrarModalRegistrarVenta,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF638541),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.point_of_sale),
+                        label: const Text('Confirmar venta'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.color, required this.texto});
+
+  final Color color;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.airline_seat_recline_normal, color: color, size: 17),
+        const SizedBox(width: 4),
+        Text(texto, style: const TextStyle(fontSize: 12)),
+      ],
     );
   }
 }
