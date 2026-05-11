@@ -194,7 +194,8 @@ class _VentaViewState extends State<VentaView> {
     final vendedorId = _valorDetalle(detalle, 'fk_usuario_vendedor');
     final precio = _valorDetalle(detalle, 'precio');
     final fecha = _formatearFechaVenta(detalle['fecha_venta']);
-
+    final origen = _valorDetalle(detalle, 'origen');
+    final destino = _valorDetalle(detalle, 'destino');
     String nombreVendedor = vendedorId; 
     
     if (vendedorId.isNotEmpty && vendedorId != '-') {
@@ -235,6 +236,8 @@ class _VentaViewState extends State<VentaView> {
               Text('Precio: Bs ${precio.isEmpty ? '-' : precio}'),
               Text('Fecha venta: $fecha'),
               Text('Estado: ${estado.isEmpty ? '-' : estado}'),
+              Text('Origen: $origen'),
+              Text('Destino: $destino'),
               // mostramos el nombre completo del vendedor
               Text('Vendedor: ${nombreVendedor.isEmpty ? '-' : nombreVendedor}',
               ),
