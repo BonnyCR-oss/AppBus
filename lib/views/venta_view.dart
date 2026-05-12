@@ -44,6 +44,15 @@ class _VentaViewState extends State<VentaView> {
   bool _sincronizandoBloqueos = false;
   DateTime? _ultimoAvisoAsientoBloqueado;
 
+  Future<T> _conTimeout<T>(Future<T> future, String accion) {
+    return future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw TimeoutException(
+        'Tiempo de espera agotado al $accion. Revisa tu conexion e intenta de nuevo.',
+      ),
+    );
+  }
+
   Widget _buildCampoDetalle({
     required IconData icon,
     required String etiqueta,
@@ -179,9 +188,7 @@ class _VentaViewState extends State<VentaView> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      _mostrarError(e.toString());
     } finally {
       if (mounted) setState(() => _cargandoViajes = false);
     }
@@ -189,12 +196,7 @@ class _VentaViewState extends State<VentaView> {
 
   Future<void> _seleccionarViaje(ViajeModel viaje) async {
     if (viaje.fkBus == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Este viaje no tiene bus asignado.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _mostrarError('Este viaje no tiene bus asignado.');
       return;
     }
 
@@ -237,9 +239,7 @@ class _VentaViewState extends State<VentaView> {
       _iniciarSincronizacionPeriodica();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      _mostrarError(e.toString());
     } finally {
       if (mounted) setState(() => _cargandoAsientos = false);
     }
@@ -476,11 +476,8 @@ class _VentaViewState extends State<VentaView> {
       if (!puedeAvisar) return;
       _ultimoAvisoAsientoBloqueado = ahora;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Este asiento está siendo seleccionado por otro vendedor'),
-          backgroundColor: Colors.orange,
-        ),
+      _mostrarAdvertencia(
+        'Este asiento esta siendo seleccionado por otro vendedor.',
       );
       return;
     }
@@ -669,9 +666,13 @@ class _VentaViewState extends State<VentaView> {
       throw 'Debes seleccionar al menos un asiento.';
     }
 
-    final sesion = await _sessionService.leerSesion();
+    final sesion = await _conTimeout(
+      _sessionService.leerSesion(),
+      'leer sesion de usuario',
+    );
 
-    await _boletoController.registrarVenta(
+    await _conTimeout(
+      _boletoController.registrarVenta(
       viajeId: _viajeSeleccionado!.id,
       asientos: seleccionados,
       nombrePasajero: nombreComprador,
@@ -680,12 +681,14 @@ class _VentaViewState extends State<VentaView> {
       vendedorId: sesion?.usuarioId,
       origen: origen,
       destino: destino,     
+    ),
+      'registrar venta',
     );
 
-    final resultados = await Future.wait([
+    final resultados = await _conTimeout(Future.wait([
       _asientoController.obtenerAsientosPorBus(_viajeSeleccionado!.fkBus!),
       _boletoController.obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id),
-    ]);
+    ]), 'actualizar datos de asientos y boletos');
     final asientosActualizados = resultados[0] as List<AsientoModel>;
     final detalleBoletos = resultados[1] as Map<int, Map<String, dynamic>>;
 
@@ -696,9 +699,12 @@ class _VentaViewState extends State<VentaView> {
       _asientosSeleccionadosIds.clear();
     });
 
-    await _asientoController.desbloquearAsientosVendidos(
-      viajeId: _viajeSeleccionado!.id,
-      asientosIds: seleccionados.map((a) => a.id).toList(),
+    await _conTimeout(
+      _asientoController.desbloquearAsientosVendidos(
+        viajeId: _viajeSeleccionado!.id,
+        asientosIds: seleccionados.map((a) => a.id).toList(),
+      ),
+      'liberar asientos vendidos',
     );
   }
 
@@ -893,17 +899,19 @@ class _VentaViewState extends State<VentaView> {
                 ),
                 ElevatedButton(
                   onPressed: (guardando || !todosValidos) ? null : () async {
-                    final messenger = ScaffoldMessenger.of(this.context);
                     final navigator = Navigator.of(contextoModal);
                     final nombre = nombreCtrl.text.trim();
                     final ci = ciCtrl.text.trim();
                     final precioFinal = double.tryParse(precioCtrl.text) ?? 0.0;
+                    var ventaExitosa = false;
 
                     setModalState(() => guardando = true);
                     try {
                       // Verificación final: asegurarse que los asientos siguen disponibles
-                      final detalleBoletos = await _boletoController
-                          .obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id);
+                      final detalleBoletos = await _conTimeout(
+                        _boletoController.obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id),
+                        'verificar disponibilidad de asientos',
+                      );
                       
                       // Verificar si algún asiento fue vendido
                       final asientosNoDisponibles = <int>[];
@@ -916,14 +924,8 @@ class _VentaViewState extends State<VentaView> {
                       if (asientosNoDisponibles.isNotEmpty) {
                         setModalState(() => guardando = false);
                         final asientosText = asientosNoDisponibles.join(', ');
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor. Por favor, selecciona otros asientos.',
-                            ),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 4),
-                          ),
+                        _mostrarAdvertencia(
+                          'Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor. Por favor, selecciona otros asientos.',
                         );
                         return;
                       }
@@ -936,21 +938,18 @@ class _VentaViewState extends State<VentaView> {
                         precio: precioFinal,
                       );
                       if (!mounted) return;
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text('Venta registrada correctamente'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      ventaExitosa = true;
                       navigator.pop();
+                      _mostrarExito('Venta registrada correctamente.');
                     } catch (e) {
-                      setModalState(() => guardando = false);
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text('Error: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      if (contextoModal.mounted) {
+                        setModalState(() => guardando = false);
+                      }
+                      _mostrarError('Error: ${e.toString()}');
+                    } finally {
+                      if (!ventaExitosa && contextoModal.mounted) {
+                        setModalState(() => guardando = false);
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(

@@ -186,7 +186,7 @@ class ReportsController {
           .lt('fecha_salida', fechaFin);
 
       // Obtener rutas para enriquecer datos
-      final rutasIds = Set<int>();
+      final rutasIds = <int>{};
       for (final viaje in datos as List) {
         final rutaId = viaje['fk_ruta'];
         if (rutaId is int) rutasIds.add(rutaId);
@@ -205,7 +205,7 @@ class ReportsController {
       }
 
       // Enriquecer con datos de boletos
-      final viajes = [];
+      final viajes = <Map<String, dynamic>>[];
 
       for (final viaje in datos as List) {
         final viajeId = viaje['id'];

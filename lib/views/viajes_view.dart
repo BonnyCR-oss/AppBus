@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +36,15 @@ class _ViajesViewState extends State<ViajesView> {
   bool _cargando = true;
   int? _usuarioId;
   DateTime? _fechaFiltroHistorial;
+
+  Future<T> _conTimeout<T>(Future<T> future, String accion) {
+    return future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw TimeoutException(
+        'Tiempo de espera agotado al $accion. Revisa tu conexion e intenta de nuevo.',
+      ),
+    );
+  }
 
   Future<int?> _resolverAdminIdActual() async {
     final sesion = await _sessionService.leerSesion();
@@ -96,7 +107,6 @@ class _ViajesViewState extends State<ViajesView> {
 
   void _mostrarError(String mensaje) => _mostrarMensaje('Error', mensaje, Colors.red);
   void _mostrarExito(String mensaje) => _mostrarMensaje('Exitoso', mensaje, Colors.green);
-  void _mostrarAdvertencia(String mensaje) => _mostrarMensaje('Advertencia', mensaje, Colors.orange);
 
   @override
   void initState() {
@@ -107,8 +117,11 @@ class _ViajesViewState extends State<ViajesView> {
   Future<void> _cargarDatos() async {
     setState(() => _cargando = true);
     try {
-      final adminId = await _resolverAdminIdActual();
-      final resultados = await Future.wait([
+      final adminId = await _conTimeout(
+        _resolverAdminIdActual(),
+        'verificar el admin actual',
+      );
+      final resultados = await _conTimeout(Future.wait([
         _viajeController.obtenerViajesActivos(),
         widget.esAdmin
             ? _rutaController.obtenerRutas()
@@ -116,7 +129,7 @@ class _ViajesViewState extends State<ViajesView> {
         widget.esAdmin
             ? _viajeController.obtenerHistorialViajes()
             : Future.value(<ViajeModel>[]),
-      ]);
+      ]), 'cargar datos de viajes');
 
       final viajesActivos = resultados[0] as List<ViajeModel>;
       final rutas = resultados[1] as List<RutaModel>;
@@ -159,7 +172,10 @@ class _ViajesViewState extends State<ViajesView> {
   Future<void> _cambiarEstadoViaje(int idViaje, String nuevoEstado) async {
     setState(() => _cargando = true);
     try {
-      await _viajeController.actualizarEstadoViaje(idViaje, nuevoEstado);
+      await _conTimeout(
+        _viajeController.actualizarEstadoViaje(idViaje, nuevoEstado),
+        'actualizar estado del viaje',
+      );
       await _cargarDatos(); 
       
       if (mounted) {
@@ -260,7 +276,10 @@ class _ViajesViewState extends State<ViajesView> {
     setState(() => _cargando = true);
     try {
       final fechaStr = _fechaYMD(seleccion);
-      final filtrados = await _viajeController.obtenerHistorialViajesPorFecha(fechaStr);
+      final filtrados = await _conTimeout(
+        _viajeController.obtenerHistorialViajesPorFecha(fechaStr),
+        'filtrar historial por fecha',
+      );
       if (!mounted) return;
 
       setState(() {
@@ -399,12 +418,15 @@ class _ViajesViewState extends State<ViajesView> {
 
                 setState(() => _cargando = true);
                 try {
-                  await _viajeController.crearViaje(
+                  await _conTimeout(
+                    _viajeController.crearViaje(
                     idRuta: rutaId,
                     idAdmin: adminId,
                     idBus: busId,
                     fechaSalida: fechaStr,
                     horaSalida: horaStr,
+                    ),
+                    'crear viaje',
                   );
 
                   await _cargarDatos();
