@@ -30,12 +30,11 @@ class _ViajesViewState extends State<ViajesView> {
   List<ViajeModel> _viajesHoy = [];
   List<ViajeModel> _historial = [];
   List<ViajeModel> _historialHoy = [];
-  List<ViajeModel> _historialAyer = [];
   List<ViajeModel> _historialFiltrado = [];
   List<RutaModel> _rutas = [];
   bool _cargando = true;
+  String _filtroActivo = 'Todos';
   int? _usuarioId;
-  DateTime? _fechaFiltroHistorial;
 
   Future<T> _conTimeout<T>(Future<T> future, String accion) {
     return future.timeout(
@@ -82,10 +81,7 @@ class _ViajesViewState extends State<ViajesView> {
   void _recalcularListasHistorial() {
     final hoy = DateTime.now();
     final hoyYMD = _fechaYMD(hoy);
-    final ayerYMD = _fechaYMD(hoy.subtract(const Duration(days: 1)));
-
     _historialHoy = _historial.where((v) => v.fechaSalida == hoyYMD).toList();
-    _historialAyer = _historial.where((v) => v.fechaSalida == ayerYMD).toList();
   }
 
   void _mostrarMensaje(String titulo, String mensaje, Color color) {
@@ -144,7 +140,6 @@ class _ViajesViewState extends State<ViajesView> {
         _viajesHoy = viajesHoy;
         _rutas = rutas;
         _historial = historial;
-        _fechaFiltroHistorial = null;
         _historialFiltrado = [];
         _recalcularListasHistorial();
       });
@@ -263,42 +258,98 @@ class _ViajesViewState extends State<ViajesView> {
     );
   }
 
-  Future<void> _filtrarHistorialPorFecha() async {
-    final seleccion = await showDatePicker(
+  Future<void> _mostrarOpcionesFiltro() async {
+    final opcion = await showDialog<String>(
       context: context,
-      initialDate: _fechaFiltroHistorial ?? DateTime.now().subtract(const Duration(days: 2)),
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime.now(),
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: const Text('Filtrar historial'),
+          children: <Widget>[
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'Esta semana'),
+              child: const Padding(padding: EdgeInsets.all(8.0), child: Text('Esta semana')),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'Este mes'),
+              child: const Padding(padding: EdgeInsets.all(8.0), child: Text('Este mes')),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'Mes anterior'),
+              child: const Padding(padding: EdgeInsets.all(8.0), child: Text('Mes anterior')),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'Últimos 6 meses'),
+              child: const Padding(padding: EdgeInsets.all(8.0), child: Text('Últimos 6 meses')),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'Todos'),
+              child: const Padding(padding: EdgeInsets.all(8.0), child: Text('Todos', style: TextStyle(fontWeight: FontWeight.bold))),
+            ),
+          ],
+        );
+      }
     );
 
-    if (seleccion == null) return;
+    if (opcion != null && opcion != _filtroActivo) {
+      _aplicarFiltro(opcion);
+    }
+  }
 
-    setState(() => _cargando = true);
+  Future<void> _aplicarFiltro(String filtro) async {
+    setState(() {
+      _filtroActivo = filtro;
+      _cargando = true;
+    });
+
     try {
-      final fechaStr = _fechaYMD(seleccion);
-      final filtrados = await _conTimeout(
-        _viajeController.obtenerHistorialViajesPorFecha(fechaStr),
-        'filtrar historial por fecha',
-      );
-      if (!mounted) return;
+      DateTime ahora = DateTime.now();
+      DateTime? fechaInicio;
+      DateTime? fechaFin = ahora; // Casi todos los filtros terminan hoy
 
-      setState(() {
-        _fechaFiltroHistorial = seleccion;
-        _historialFiltrado = filtrados;
-      });
+      switch (filtro) {
+        case 'Esta semana':
+          fechaInicio = ahora.subtract(Duration(days: ahora.weekday - 1));
+          break;
+        case 'Este mes':
+          fechaInicio = DateTime(ahora.year, ahora.month, 1);
+          break;
+        case 'Mes anterior':
+          fechaInicio = DateTime(ahora.year, ahora.month - 1, 1);
+          // El día 0 del mes actual equivale al último día del mes anterior
+          fechaFin = DateTime(ahora.year, ahora.month, 0); 
+          break;
+        case 'Últimos 6 meses':
+          fechaInicio = DateTime(ahora.year, ahora.month - 6, 1);
+          break;
+        case 'Todos':
+        default:
+          fechaInicio = null;
+          fechaFin = null;
+          break;
+      }
+
+      List<ViajeModel> filtrados = [];
+      
+      if (fechaInicio == null || fechaFin == null) {
+        // Aprovechamos la función normal si eligió "Todos"
+        filtrados = await _viajeController.obtenerHistorialViajes(); 
+      } else {
+        // Formateamos las fechas (YYYY-MM-DD) para Postgres
+        final inicioStr = fechaInicio.toIso8601String().split('T').first;
+        final finStr = fechaFin.toIso8601String().split('T').first;
+        
+        filtrados = await _viajeController.obtenerHistorialPorRango(inicioStr, finStr);
+      }
+
+      if (!mounted) return;
+      setState(() => _historialFiltrado = filtrados);
+      
     } catch (e) {
       if (!mounted) return;
       _mostrarError(e.toString());
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
-  }
-
-  void _limpiarFiltroHistorial() {
-    setState(() {
-      _fechaFiltroHistorial = null;
-      _historialFiltrado = [];
-    });
   }
 
   Future<void> _mostrarDialogoCrearViaje() async {
@@ -453,9 +504,10 @@ class _ViajesViewState extends State<ViajesView> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF9FAF7),
+      backgroundColor: const Color(0xFFF9FAF7),
       appBar: AppBar(
         backgroundColor: const Color(0xFF638541),
         title: const Text('Viajes', style: TextStyle(color: Colors.white)),
@@ -487,19 +539,22 @@ class _ViajesViewState extends State<ViajesView> {
                         children: [
                           const Expanded(
                             child: Text(
-                              'HISTORIAL (HOY Y AYER)',
+                              'HISTORIAL',
                               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                             ),
                           ),
+                          // --- AQUÍ LLAMAMOS AL NUEVO MENÚ DE FILTROS ---
                           TextButton.icon(
-                            onPressed: _filtrarHistorialPorFecha,
-                            icon: const Icon(Icons.filter_alt_outlined, size: 18),
-                            label: const Text('Filtrar fecha'),
+                            onPressed: _mostrarOpcionesFiltro,
+                            icon: const Icon(Icons.filter_list, size: 18),
+                            label: const Text('Filtrar'),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      if (_fechaFiltroHistorial != null) ...[
+                      
+                      // --- AQUÍ EVALUAMOS QUÉ FILTRO ESTÁ ACTIVO ---
+                      if (_filtroActivo != 'Todos') ...[
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           decoration: BoxDecoration(
@@ -510,12 +565,12 @@ class _ViajesViewState extends State<ViajesView> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  'Filtro aplicado: ${_fechaYMD(_fechaFiltroHistorial!)}',
+                                  'Filtro: $_filtroActivo',
                                   style: const TextStyle(fontWeight: FontWeight.w600),
                                 ),
                               ),
                               TextButton(
-                                onPressed: _limpiarFiltroHistorial,
+                                onPressed: () => _aplicarFiltro('Todos'),
                                 child: const Text('Quitar filtro'),
                               ),
                             ],
@@ -524,32 +579,25 @@ class _ViajesViewState extends State<ViajesView> {
                         const SizedBox(height: 10),
                         _buildListaViajes(
                           _historialFiltrado,
-                          emptyText: 'No hay viajes en la fecha seleccionada.',
+                          emptyText: 'No hay viajes en $_filtroActivo.',
                           esHistorial: true,
                         ),
                         const SizedBox(height: 12),
+                      ] else ...[
+                        // --- SI EL FILTRO ES "TODOS", MOSTRAMOS HOY Y AYER ---
+                        const Text(
+                          'Hoy',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildListaViajes(
+                          _historialHoy,
+                          emptyText: 'No hay viajes finalizados hoy.',
+                          esHistorial: true,
+                        ),
+                        
+                        
                       ],
-                      const Text(
-                        'Hoy',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildListaViajes(
-                        _historialHoy,
-                        emptyText: 'No hay viajes finalizados hoy.',
-                        esHistorial: true,
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Ayer',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildListaViajes(
-                        _historialAyer,
-                        emptyText: 'No hay viajes finalizados ayer.',
-                        esHistorial: true,
-                      ),
                     ],
                     const SizedBox(height: 80),
                   ],

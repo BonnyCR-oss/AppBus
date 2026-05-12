@@ -95,6 +95,27 @@ class ViajeController {
       throw 'Error al cargar el historial: $e';
     }
   }
+  
+  Future<List<ViajeModel>> obtenerHistorialPorRango(String fechaInicio, String fechaFin) async {
+    try {
+      final data = await _supabase
+          .from('viajes')
+          .select('id, fk_bus, fk_admin, fk_ruta, fecha_salida, hora_salida, estado, rutas(origen, destino)')
+          .eq('estado', 'Finalizado')
+          // .gte significa Mayor o igual que (Greater Than or Equal)
+          .gte('fecha_salida', fechaInicio)
+          // .lte significa Menor o igual que (Less Than or Equal)
+          .lte('fecha_salida', fechaFin)
+          .order('fecha_salida', ascending: false)
+          .order('hora_salida', ascending: false);
+
+      return (data as List)
+          .map((map) => ViajeModel.fromMap(map as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw 'Error al filtrar el historial: $e';
+    }
+  }
 
   Future<List<ViajeModel>> obtenerHistorialViajesPorFecha(String fechaSalida) async {
     try {
