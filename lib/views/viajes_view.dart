@@ -77,6 +77,27 @@ class _ViajesViewState extends State<ViajesView> {
     _historialAyer = _historial.where((v) => v.fechaSalida == ayerYMD).toList();
   }
 
+  void _mostrarMensaje(String titulo, String mensaje, Color color) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titulo, style: TextStyle(color: color)),
+        content: Text(mensaje),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: color),
+            child: const Text('Aceptar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarError(String mensaje) => _mostrarMensaje('Error', mensaje, Colors.red);
+  void _mostrarExito(String mensaje) => _mostrarMensaje('Exitoso', mensaje, Colors.green);
+  void _mostrarAdvertencia(String mensaje) => _mostrarMensaje('Advertencia', mensaje, Colors.orange);
+
   @override
   void initState() {
     super.initState();
@@ -116,9 +137,7 @@ class _ViajesViewState extends State<ViajesView> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      _mostrarError(e.toString());
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -144,18 +163,11 @@ class _ViajesViewState extends State<ViajesView> {
       await _cargarDatos(); 
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Estado actualizado a "$nuevoEstado"'), 
-            backgroundColor: Colors.green
-          ),
-        );
+        _mostrarExito('Estado actualizado a "$nuevoEstado"');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al actualizar: $e'), backgroundColor: Colors.red),
-        );
+        _mostrarError('Error al actualizar: $e');
         setState(() => _cargando = false);
       }
     }
@@ -257,9 +269,7 @@ class _ViajesViewState extends State<ViajesView> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      _mostrarError(e.toString());
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -273,17 +283,11 @@ class _ViajesViewState extends State<ViajesView> {
   }
 
   Future<void> _mostrarDialogoCrearViaje() async {
-    final messenger = ScaffoldMessenger.of(context);
     final adminId = _usuarioId ?? await _resolverAdminIdActual();
     if (!mounted) return;
 
     if (adminId == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo verificar quién es el admin actual. Cierra sesión e inicia de nuevo.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _mostrarError('No se pudo verificar quién es el admin actual. Cierra sesión e inicia de nuevo.');
       return;
     }
 
@@ -292,12 +296,7 @@ class _ViajesViewState extends State<ViajesView> {
     }
 
     if (_rutas.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No hay rutas disponibles para crear viajes.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _mostrarError('No hay rutas disponibles para crear viajes.');
       return;
     }
 
@@ -370,7 +369,6 @@ class _ViajesViewState extends State<ViajesView> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final messenger = ScaffoldMessenger.of(this.context);
                 const busId = 1;
 
                 // Validar que la fecha y hora no sean pasadas
@@ -379,12 +377,7 @@ class _ViajesViewState extends State<ViajesView> {
                 final fechaSeleccionada = DateTime(fecha.year, fecha.month, fecha.day);
 
                 if (fechaSeleccionada.isBefore(fechaHoy)) {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('No puedes crear viajes con fechas anteriores.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                  _mostrarError('No puedes crear viajes con fechas anteriores.');
                   return;
                 }
 
@@ -394,12 +387,7 @@ class _ViajesViewState extends State<ViajesView> {
                   if (hora.hour < horaActual.hour ||
                       (hora.hour == horaActual.hour &&
                           hora.minute < horaActual.minute)) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('La hora del viaje no puede ser pasada.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    _mostrarError('La hora del viaje no puede ser pasada.');
                     return;
                   }
                 }
@@ -421,18 +409,11 @@ class _ViajesViewState extends State<ViajesView> {
 
                   await _cargarDatos();
                   if (mounted) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('Viaje creado correctamente.'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                    _mostrarExito('Viaje creado correctamente.');
                   }
                 } catch (e) {
                   if (mounted) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-                    );
+                    _mostrarError(e.toString());
                     setState(() => _cargando = false);
                   }
                 }

@@ -101,6 +101,7 @@ class _MiAppDeBusesState extends State<MiAppDeBuses>
   Widget build(BuildContext context) {
     const colorBase = Color(0xFF638541);
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Bus Claros - Gestion de Viajes',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: colorBase),

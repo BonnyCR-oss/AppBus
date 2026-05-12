@@ -4,6 +4,7 @@ import '../services/session_service.dart';
 import '../widgets/bottom_navbar.dart';
 import 'bus_photos_view.dart';
 import 'login_view.dart';
+import 'reports_view.dart';
 import 'rutas_view.dart';
 import 'viajes_view.dart';
 import 'venta_view.dart';
@@ -209,10 +210,16 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
             const SizedBox(width: 16),
-            IconButton(
-              icon: const Icon(Icons.bar_chart, color: Colors.white),
-              onPressed: () {},
-            ),
+            if (_esDueno)
+              IconButton(
+                icon: const Icon(Icons.bar_chart, color: Colors.white),
+                onPressed: () {
+                  if (!_esDueno) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ReportsView()),
+                  );
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.logout, color: Colors.white),
               onPressed: () async {

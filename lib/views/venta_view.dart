@@ -100,6 +100,27 @@ class _VentaViewState extends State<VentaView> {
     setState(() => _usuarioActualId = sesion?.usuarioId);
   }
 
+  void _mostrarMensaje(String titulo, String mensaje, Color color) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titulo, style: TextStyle(color: color)),
+        content: Text(mensaje),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: color),
+            child: const Text('Aceptar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarError(String mensaje) => _mostrarMensaje('Error', mensaje, Colors.red);
+  void _mostrarExito(String mensaje) => _mostrarMensaje('Exitoso', mensaje, Colors.green);
+  void _mostrarAdvertencia(String mensaje) => _mostrarMensaje('Advertencia', mensaje, Colors.orange);
+
   @override
   void dispose() {
     // Desbloquear todos los asientos que estaban seleccionados
@@ -327,15 +348,7 @@ class _VentaViewState extends State<VentaView> {
       // Si algún asiento fue vendido, mostrar advertencia
       if (asientosAhoraVendidos.isNotEmpty) {
         final asientosText = asientosAhoraVendidos.join(', ');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor',
-            ),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        _mostrarAdvertencia('Asiento(s) $asientosText fue(ron) vendido(s) por otro vendedor');
         // Deseleccionar los asientos vendidos
         setState(() {
           for (final asientoId in asientosAhoraVendidos) {

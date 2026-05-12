@@ -1,8 +1,12 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/login_controller.dart';
+import '../models/usuario_model.dart';
 import '../services/session_service.dart';
+import '../services/smtp_email_service.dart';
 import 'main_shell.dart';
 
 class LoginView extends StatefulWidget {
@@ -17,19 +21,320 @@ class _LoginViewState extends State<LoginView> {
   final TextEditingController _passwordController = TextEditingController();
   final LoginController _controller = LoginController();
   final SessionService _sessionService = SessionService();
+  final SmtpEmailService _smtpEmailService = SmtpEmailService();
   bool _iniciandoSesion = false;
+  bool _procesandoRecuperacion = false;
+  bool _mostrarContrasenia = false;
+
+  String? _codigoRecuperacionPendiente;
+  DateTime? _expiracionCodigoRecuperacion;
+  UsuarioModel? _usuarioRecuperacionPendiente;
 
   void _mostrarError(String mensaje) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje), backgroundColor: Colors.red),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Error', style: TextStyle(color: Colors.red)),
+        content: Text(mensaje),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Aceptar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
-  void _irARecuperarContrasenia() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Próximamente: recuperación de contraseña por correo.'),
+  void _mostrarExito(String mensaje) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exitoso', style: TextStyle(color: Colors.green)),
+        content: Text(mensaje),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Aceptar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
+    );
+  }
+
+  String _tomarPrefijo(String valor, int largo) {
+    final limpio = valor.replaceAll(RegExp(r'\s+'), '');
+    if (limpio.isEmpty) return '';
+    if (limpio.length <= largo) return limpio;
+    return limpio.substring(0, largo);
+  }
+
+  String _generarCodigo4Digitos() {
+    return (1000 + Random.secure().nextInt(9000)).toString();
+  }
+
+  String _generarContraseniaDesdeUsuario(UsuarioModel usuario) {
+    final iniNom = _tomarPrefijo(usuario.nombres, 2).toUpperCase();
+    final iniApe = _tomarPrefijo(usuario.apellidos, 2).toUpperCase();
+
+    final ciLimpio = usuario.ci.replaceAll(RegExp(r'[^0-9A-Za-z]'), '');
+    final colaCi = ciLimpio.isEmpty
+        ? '000'
+        : ciLimpio.substring(ciLimpio.length > 3 ? ciLimpio.length - 3 : 0);
+
+    final aleatorio = (100 + Random.secure().nextInt(900)).toString();
+    final base = '${iniNom.isEmpty ? 'US' : iniNom}${iniApe.isEmpty ? 'ER' : iniApe}';
+    return '$base$colaCi$aleatorio';
+  }
+
+  void _limpiarEstadoRecuperacion() {
+    _codigoRecuperacionPendiente = null;
+    _expiracionCodigoRecuperacion = null;
+    _usuarioRecuperacionPendiente = null;
+  }
+
+  void _irARecuperarContrasenia() {
+    final correoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (localContext, setLocalState) {
+            return AlertDialog(
+              title: const Text('Restablecer contrasenia'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Ingresa tu correo y te enviaremos un codigo de 4 digitos.',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: correoController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _procesandoRecuperacion
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: _procesandoRecuperacion
+                      ? null
+                      : () async {
+                          final email = correoController.text
+                              .trim()
+                              .toLowerCase();
+
+                          if (email.isEmpty || !email.contains('@')) {
+                            _mostrarError('Ingresa un correo valido');
+                            return;
+                          }
+
+                          setState(() => _procesandoRecuperacion = true);
+                          setLocalState(() {});
+
+                          try {
+                            final usuario = await _controller
+                                .buscarUsuarioPorEmail(email);
+
+                            if (usuario == null) {
+                              _mostrarError('No existe una cuenta con ese correo');
+                              return;
+                            }
+
+                            final codigo = _generarCodigo4Digitos();
+                            await _smtpEmailService.enviarCodigoRestablecimiento(
+                              to: usuario.email,
+                              nombre: usuario.nombreCompleto,
+                              codigo: codigo,
+                            );
+
+                            _codigoRecuperacionPendiente = codigo;
+                            _expiracionCodigoRecuperacion = DateTime.now()
+                                .add(const Duration(minutes: 10));
+                            _usuarioRecuperacionPendiente = usuario;
+
+                            if (!mounted || !dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
+                            _mostrarDialogoVerificarCodigo();
+                            _mostrarExito('Codigo enviado. Revisa tu correo.');
+
+                          } on PostgrestException catch (e) {
+                            _mostrarError(_controller.mensajeErrorBaseDatos(e));
+                          } catch (e) {
+                            _mostrarError(
+                              'No se pudo enviar el codigo: $e',
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(
+                                  () => _procesandoRecuperacion = false);
+                              setLocalState(() {});
+                            }
+                          }
+                        },
+                  child: _procesandoRecuperacion
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Enviar codigo'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _mostrarDialogoVerificarCodigo() {
+    final codigoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (localContext, setLocalState) {
+            Future<void> verificarCodigo() async {
+              final codigo = codigoController.text.trim();
+
+              if (codigo.length != 4) {
+                _mostrarError('El codigo debe tener 4 digitos');
+                return;
+              }
+
+              if (_codigoRecuperacionPendiente == null ||
+                  _usuarioRecuperacionPendiente == null ||
+                  _expiracionCodigoRecuperacion == null) {
+                _mostrarError('La solicitud ya no es valida. Intenta otra vez.');
+                Navigator.of(dialogContext).pop();
+                return;
+              }
+
+              if (DateTime.now().isAfter(_expiracionCodigoRecuperacion!)) {
+                _limpiarEstadoRecuperacion();
+                _mostrarError('El codigo ha expirado. Solicita uno nuevo.');
+                Navigator.of(dialogContext).pop();
+                return;
+              }
+
+              if (codigo != _codigoRecuperacionPendiente) {
+                _mostrarError('Codigo incorrecto');
+                return;
+              }
+
+              setState(() => _procesandoRecuperacion = true);
+              setLocalState(() {});
+
+              try {
+                final usuario = _usuarioRecuperacionPendiente!;
+                final contraseniaNueva = _generarContraseniaDesdeUsuario(usuario);
+
+                final hashAnterior = usuario.password;
+                final hashNuevo =
+                    _controller.generarHashContrasenia(contraseniaNueva);
+
+                await _controller.actualizarContraseniaUsuarioHash(
+                  usuarioId: usuario.id,
+                  hashContrasenia: hashNuevo,
+                );
+
+                try {
+                  await _smtpEmailService.enviarNuevaContraseniaRestablecida(
+                    to: usuario.email,
+                    nombre: usuario.nombreCompleto,
+                    contrasenia: contraseniaNueva,
+                  );
+                } catch (e) {
+                  await _controller.actualizarContraseniaUsuarioHash(
+                    usuarioId: usuario.id,
+                    hashContrasenia: hashAnterior,
+                  );
+                  rethrow;
+                }
+
+                _limpiarEstadoRecuperacion();
+                if (!mounted || !dialogContext.mounted) return;
+
+                Navigator.of(dialogContext).pop();
+                _mostrarExito('Contrasenia restablecida y enviada a tu correo.');
+
+              } catch (e) {
+                _mostrarError('No se pudo completar el restablecimiento: $e');
+              } finally {
+                if (mounted) {
+                  setState(() => _procesandoRecuperacion = false);
+                  setLocalState(() {});
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Verificar codigo'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Ingresa el codigo de 4 digitos para continuar.',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: codigoController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Codigo',
+                      border: OutlineInputBorder(),
+                      counterText: '',
+                    ),
+                    onChanged: (value) {
+                      if (value.trim().length == 4 && !_procesandoRecuperacion) {
+                        verificarCodigo();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _procesandoRecuperacion
+                      ? null
+                      : () {
+                          _limpiarEstadoRecuperacion();
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: _procesandoRecuperacion ? null : verificarCodigo,
+                  child: _procesandoRecuperacion
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Confirmar codigo'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -167,7 +472,7 @@ class _LoginViewState extends State<LoginView> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _passwordController,
-                        obscureText: true,
+                        obscureText: !_mostrarContrasenia,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) =>
                             _iniciandoSesion ? null : _iniciarSesion(),
@@ -178,6 +483,17 @@ class _LoginViewState extends State<LoginView> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _mostrarContrasenia ? Icons.visibility : Icons.visibility_off,
+                              color: const Color(0xFF638541),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _mostrarContrasenia = !_mostrarContrasenia;
+                              });
+                            },
                           ),
                         ),
                       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/usuario_model.dart';
 import '../controllers/usuario_form_controller.dart';
 
@@ -23,6 +24,45 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
   
   final UsuarioFormController _controller = UsuarioFormController();
   bool _estaGuardando = false;
+
+  String? _validarCampos() {
+    final nombres = _nombresCtrl.text.trim();
+    final apellidos = _apellidosCtrl.text.trim();
+    final ci = _ciCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+
+    if (nombres.isEmpty ||
+        apellidos.isEmpty ||
+        ci.isEmpty ||
+        email.isEmpty) {
+      return 'Completa todos los campos obligatorios.';
+    }
+
+    if (nombres.length < 2 || apellidos.length < 2) {
+      return 'Nombres y apellidos deben tener al menos 2 caracteres.';
+    }
+
+    final regexNombre = RegExp(r'^[A-Za-z ]+$');
+    if (!regexNombre.hasMatch(nombres) || !regexNombre.hasMatch(apellidos)) {
+      return 'Nombres y apellidos solo pueden contener letras y espacios.';
+    }
+
+    final regexCi = RegExp(r'^[0-9]{6,14}$');
+    if (!regexCi.hasMatch(ci)) {
+      return 'El CI debe contener solo numeros (entre 6 y 14 digitos).';
+    }
+
+    final regexEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!regexEmail.hasMatch(email)) {
+      return 'Ingresa un correo electronico valido.';
+    }
+
+    if (!['Admin', 'Vendedor'].contains(_rolSeleccionado)) {
+      return 'Selecciona un rol valido.';
+    }
+
+    return null;
+  }
 
   @override
   void initState() {
@@ -74,13 +114,11 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
   }
 
   Future<void> _guardar() async {
-    if (_nombresCtrl.text.isEmpty ||
-        _apellidosCtrl.text.isEmpty ||
-        _ciCtrl.text.isEmpty ||
-        _emailCtrl.text.isEmpty) {
+    final errorValidacion = _validarCampos();
+    if (errorValidacion != null) {
       await _mostrarModal(
-        titulo: 'Campos requeridos',
-        mensaje: 'Completa todos los campos obligatorios.',
+        titulo: 'Validacion',
+        mensaje: errorValidacion,
       );
       return;
     }
@@ -150,13 +188,37 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            TextField(controller: _nombresCtrl, decoration: _inputDecoration('Nombres')),
+            TextField(
+              controller: _nombresCtrl,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z ]')),
+              ],
+              decoration: _inputDecoration('Nombres'),
+            ),
             const SizedBox(height: 16),
-            TextField(controller: _apellidosCtrl, decoration: _inputDecoration('Apellidos')),
+            TextField(
+              controller: _apellidosCtrl,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z ]')),
+              ],
+              decoration: _inputDecoration('Apellidos'),
+            ),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: TextField(controller: _ciCtrl, decoration: _inputDecoration('CI'))),
+                Expanded(
+                  child: TextField(
+                    controller: _ciCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(14),
+                    ],
+                    decoration: _inputDecoration('CI'),
+                  ),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
@@ -169,7 +231,12 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
               ],
             ),
             const SizedBox(height: 16),
-            TextField(controller: _emailCtrl, decoration: _inputDecoration('Email')),
+            TextField(
+              controller: _emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              decoration: _inputDecoration('Email'),
+            ),
             
             const SizedBox(height: 24),
             

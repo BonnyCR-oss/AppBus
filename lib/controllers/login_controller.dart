@@ -5,10 +5,10 @@ import '../models/usuario_model.dart';
 
 class LoginController {
   static const int rolDuenoId = 1;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   Future<UsuarioModel?> buscarUsuarioPorEmail(String email) async {
-    final supabase = Supabase.instance.client;
-    final data = await supabase
+    final data = await _supabase
         .from('usuarios')
         .select('id, nombres, apellidos, ci, email, password, fk_rol, estado')//agregue estado
         .ilike('email', email)
@@ -40,5 +40,30 @@ class LoginController {
       return 'Sin permisos en Supabase para leer usuarios. Revisa GRANT y policy RLS.';
     }
     return 'Error de base de datos: ${e.message}';
+  }
+
+  String generarHashContrasenia(String passwordPlano) {
+    return BCrypt.hashpw(passwordPlano, BCrypt.gensalt());
+  }
+
+  Future<void> actualizarContraseniaUsuario({
+    required int usuarioId,
+    required String nuevaContraseniaPlano,
+  }) async {
+    final hash = generarHashContrasenia(nuevaContraseniaPlano);
+    await actualizarContraseniaUsuarioHash(
+      usuarioId: usuarioId,
+      hashContrasenia: hash,
+    );
+  }
+
+  Future<void> actualizarContraseniaUsuarioHash({
+    required int usuarioId,
+    required String hashContrasenia,
+  }) async {
+    await _supabase
+        .from('usuarios')
+        .update({'password': hashContrasenia})
+        .eq('id', usuarioId);
   }
 }
