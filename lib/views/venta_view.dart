@@ -986,7 +986,7 @@ class _VentaViewState extends State<VentaView> {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
-          'Hora: ${_formatearHora(viaje.horaSalida)}   Bus: ${viaje.fkBus ?? '-'}\nEstado: ${viaje.estado}',
+          'Hora: ${_formatearHora(viaje.horaSalida)} fecha: ${viaje.fechaSalida} \nBus: ${viaje.fkBus ?? '-'}Estado: ${viaje.estado}',
         ),
         trailing: const Icon(Icons.chevron_right),
       ),
@@ -1277,10 +1277,11 @@ class _VentaViewState extends State<VentaView> {
                         ..._viajesHoy.map(_buildItemViaje),
                         const SizedBox(height: 16),
                       ],
-                      // Secciones de viajes futuros agrupados por fecha
-                      ..._viajesPorFecha.entries.map((entry) {
-                        final fecha = entry.key;
-                        final viajes = entry.value;
+                      // Secciones de viajes futuros agrupados por fecha (ORDENADOS CRONOLÓGICAMENTE)
+                      ...(_viajesPorFecha.keys.toList()..sort()).map((fecha) {
+                        // Obtenemos la lista de viajes para esta fecha específica
+                        final viajes = _viajesPorFecha[fecha]!;
+                        
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
