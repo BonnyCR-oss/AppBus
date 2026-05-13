@@ -1,121 +1,75 @@
 import 'package:flutter/material.dart';
 
+// Modelo para cada botón de la barra
 class BottomNavItem {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-  final bool isEnabled;
 
   BottomNavItem({
     required this.label,
     required this.icon,
     required this.onTap,
-    this.isEnabled = true,
   });
 }
 
-class CustomBottomNavBar extends StatefulWidget {
+// El Widget visual de la barra
+class CustomBottomNavBar extends StatelessWidget {
   final List<BottomNavItem> items;
-  final int initialIndex;
   final Color backgroundColor;
   final Color activeColor;
   final Color inactiveColor;
-  final double height;
+  
+  // --- NUEVO: La variable que recibe qué pantalla está activa ---
+  final int currentIndex; 
 
   const CustomBottomNavBar({
     super.key,
     required this.items,
-    this.initialIndex = 0,
-    this.backgroundColor = const Color(0xFF638541),
-    this.activeColor = Colors.white,
-    this.inactiveColor = Colors.white54,
-    this.height = 70,
+    required this.backgroundColor,
+    required this.activeColor,
+    required this.inactiveColor,
+    this.currentIndex = 0, // Por defecto será el 0 (Venta)
   });
-
-  @override
-  State<CustomBottomNavBar> createState() => _CustomBottomNavBarState();
-}
-
-class _CustomBottomNavBarState extends State<CustomBottomNavBar> {
-  late int _currentIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex;
-  }
-
-  @override
-  void didUpdateWidget(CustomBottomNavBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialIndex != _currentIndex) {
-      _currentIndex = widget.initialIndex;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: widget.height,
-      decoration: BoxDecoration(
-        color: widget.backgroundColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(25),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
+      color: backgroundColor,
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: List.generate(
-          widget.items.length,
-          (index) {
-            final item = widget.items[index];
-            final isActive = _currentIndex == index;
-            final isEnabled = item.isEnabled;
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(items.length, (index) {
+          final item = items[index];
+          
+          // --- MAGIA: Comparamos si este botón es el que está seleccionado ---
+          final isSelected = index == currentIndex; 
 
-            return Expanded(
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: isEnabled
-                      ? () {
-                          setState(() => _currentIndex = index);
-                          item.onTap();
-                        }
-                      : null,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        item.icon,
-                        color: isActive && isEnabled
-                            ? widget.activeColor
-                            : widget.inactiveColor,
-                        size: 24,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.label,
-                        style: TextStyle(
-                          color: isActive && isEnabled
-                              ? widget.activeColor
-                              : widget.inactiveColor,
-                          fontSize: 10,
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+          return GestureDetector(
+            onTap: item.onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  item.icon,
+                  // Si está seleccionado, brilla. Si no, se apaga.
+                  color: isSelected ? activeColor : inactiveColor,
+                  size: 28,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isSelected ? activeColor : inactiveColor,
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }

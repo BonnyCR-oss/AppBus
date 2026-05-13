@@ -239,6 +239,7 @@ class _MainShellState extends State<MainShell> {
         color: const Color(0xFF638541),
         child: SafeArea(
           child: CustomBottomNavBar(
+            currentIndex: _currentIndex,
             items: _navItems,
             backgroundColor: const Color(0xFF638541),
             activeColor: Colors.white,
