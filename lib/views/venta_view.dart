@@ -163,15 +163,19 @@ class _VentaViewState extends State<VentaView> {
       final rutas = resultados[1] as List<RutaModel>;
       if (!mounted) return;
 
-      // Separar viajes de hoy vs futuro
       final hoy = _obtenerFechaHoy();
-      final viajesHoy = <ViajeModel>[];
+      
+      // Mantenemos el nombre de tus variables para no romper la interfaz visual
+      final viajesHoy = <ViajeModel>[]; 
       final viajesPorFecha = <String, List<ViajeModel>>{};
 
       for (final viaje in viajes) {
-        if (viaje.fechaSalida == hoy) {
+        // CORRECCIÓN: Si el viaje es de hoy O de una fecha anterior (<= 0), va a la lista principal
+        if (viaje.fechaSalida.compareTo(hoy) <= 0) {
           viajesHoy.add(viaje);
-        } else if (viaje.fechaSalida.compareTo(hoy) > 0) {
+        } 
+        // Si el viaje es estrictamente del futuro (mañana en adelante), se agrupa
+        else {
           viajesPorFecha.putIfAbsent(viaje.fechaSalida, () => []).add(viaje);
         }
       }
@@ -1266,7 +1270,7 @@ class _VentaViewState extends State<VentaView> {
                       // Sección de hoy
                       if (_viajesHoy.isNotEmpty) ...[
                         const Text(
-                          'VIAJES DE HOY',
+                          'VIAJES PROGRAMADOS Y EN MARCHA',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                         ),
                         const SizedBox(height: 8),

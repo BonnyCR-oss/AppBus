@@ -81,7 +81,7 @@ class BusPhotosView extends StatelessWidget {
         backgroundColor: const Color(0xFF638541),
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
-          'Galería del Bus',
+          'Fotos del Bus',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),

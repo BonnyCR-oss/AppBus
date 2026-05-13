@@ -29,7 +29,6 @@ class _ViajesViewState extends State<ViajesView> {
 
   List<ViajeModel> _viajesHoy = [];
   List<ViajeModel> _historial = [];
-  List<ViajeModel> _historialHoy = [];
   List<ViajeModel> _historialFiltrado = [];
   List<RutaModel> _rutas = [];
   bool _cargando = true;
@@ -71,18 +70,6 @@ class _ViajesViewState extends State<ViajesView> {
     }
   }
 
-  String _fechaYMD(DateTime fecha) {
-    final y = fecha.year.toString().padLeft(4, '0');
-    final m = fecha.month.toString().padLeft(2, '0');
-    final d = fecha.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
-
-  void _recalcularListasHistorial() {
-    final hoy = DateTime.now();
-    final hoyYMD = _fechaYMD(hoy);
-    _historialHoy = _historial.where((v) => v.fechaSalida == hoyYMD).toList();
-  }
 
   void _mostrarMensaje(String titulo, String mensaje, Color color) {
     showDialog(
@@ -131,8 +118,7 @@ class _ViajesViewState extends State<ViajesView> {
       final rutas = resultados[1] as List<RutaModel>;
       final historial = resultados[2] as List<ViajeModel>;
 
-      final hoyYMD = _fechaYMD(DateTime.now());
-      final viajesHoy = viajesActivos.where((v) => v.fechaSalida == hoyYMD).toList();
+      final viajesHoy = viajesActivos;
 
       if (!mounted) return;
       setState(() {
@@ -141,7 +127,6 @@ class _ViajesViewState extends State<ViajesView> {
         _rutas = rutas;
         _historial = historial;
         _historialFiltrado = [];
-        _recalcularListasHistorial();
       });
     } catch (e) {
       if (!mounted) return;
@@ -584,19 +569,13 @@ class _ViajesViewState extends State<ViajesView> {
                         ),
                         const SizedBox(height: 12),
                       ] else ...[
-                        // --- SI EL FILTRO ES "TODOS", MOSTRAMOS HOY Y AYER ---
-                        const Text(
-                          'Hoy',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        // --- SI EL FILTRO ES "TODOS", MOSTRAMOS LA LISTA COMPLETA ---
                         const SizedBox(height: 8),
                         _buildListaViajes(
-                          _historialHoy,
-                          emptyText: 'No hay viajes finalizados hoy.',
+                          _historial, // Pasamos la variable que tiene todo el historial
+                          emptyText: 'No hay viajes finalizados en el historial.',
                           esHistorial: true,
                         ),
-                        
-                        
                       ],
                     ],
                     const SizedBox(height: 80),
