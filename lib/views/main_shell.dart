@@ -235,13 +235,17 @@ class _MainShellState extends State<MainShell> {
           ],
         ),
         body: _buildCurrentView(),
-        bottomNavigationBar: CustomBottomNavBar(
-          items: _navItems,
-          initialIndex: _currentIndex,
-          backgroundColor: const Color(0xFF638541),
-          activeColor: Colors.white,
-          inactiveColor: Colors.white54,
+        bottomNavigationBar: Container(
+        color: const Color(0xFF638541),
+        child: SafeArea(
+          child: CustomBottomNavBar(
+            items: _navItems,
+            backgroundColor: const Color(0xFF638541),
+            activeColor: Colors.white,
+            inactiveColor: Colors.white54,
+          ),
         ),
+      ),
       ),
     );
   }
