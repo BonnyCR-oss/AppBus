@@ -360,7 +360,7 @@ class _ViajesViewState extends State<ViajesView> {
             Row(
               children: [
                 Icon(Icons.person_outline, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
+                const SizedBox(width: 3),
                 Text('Cliente: ${alquiler.nombreCliente}', style: TextStyle(color: Colors.grey[700])),
               ],
             ),
@@ -371,7 +371,7 @@ class _ViajesViewState extends State<ViajesView> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Precio Acordado: Bs. ${alquiler.precioTotal}',
+              'Precio : Bs. ${alquiler.precioTotal}',
               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
             ),
           ],
@@ -836,7 +836,7 @@ class _ViajesViewState extends State<ViajesView> {
                               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                             ),
                           ),
-                          // --- AQUÍ LLAMAMOS AL NUEVO MENÚ DE FILTROS ---
+
                           TextButton.icon(
                             onPressed: _mostrarOpcionesFiltro,
                             icon: const Icon(Icons.filter_list, size: 18),
@@ -846,7 +846,6 @@ class _ViajesViewState extends State<ViajesView> {
                       ),
                       const SizedBox(height: 8),
                       
-                      // --- AQUÍ EVALUAMOS QUÉ FILTRO ESTÁ ACTIVO ---
                       if (_filtroActivo != 'Todos') ...[
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -871,7 +870,6 @@ class _ViajesViewState extends State<ViajesView> {
                         ),
                         const SizedBox(height: 10),
                         
-                        // 1. Mostramos los ALQUILERES filtrados primero
                         _buildListaMixta(
                           _historialFiltrado,
                           _historialAlquileresFiltrado,
@@ -908,11 +906,11 @@ class _ViajesViewState extends State<ViajesView> {
                   onPressed: _mostrarDialogoCrearAlquiler, 
                   backgroundColor: Colors.orange[600], 
                   foregroundColor: Colors.white,
-                  icon: const Icon(Icons.directions_bus_filled),
+                  icon: const Icon(Icons.add),
                   label: const Text('Nuevo alquiler'),
                 ),
                 
-                const SizedBox(height: 16),
+                const SizedBox(height: 4),
                 
                 //BOTON DE NUEVO VIAJE (Abajo)
                 FloatingActionButton.extended(
