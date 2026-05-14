@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_bus/controllers/alquiler_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,6 +10,7 @@ import '../models/ruta_model.dart';
 import '../models/viaje_model.dart';
 import '../services/session_service.dart';
 import 'viaje_detalle_view.dart';
+import '../models/alquiler_model.dart';
 
 class ViajesView extends StatefulWidget {
   const ViajesView({
@@ -26,11 +28,15 @@ class _ViajesViewState extends State<ViajesView> {
   final ViajeController _viajeController = ViajeController();
   final RutaController _rutaController = RutaController();
   final SessionService _sessionService = SessionService();
+  final AlquilerController _alquilerController = AlquilerController();
 
   List<ViajeModel> _viajesHoy = [];
   List<ViajeModel> _historial = [];
   List<ViajeModel> _historialFiltrado = [];
   List<RutaModel> _rutas = [];
+  List<AlquilerModel> _alquileresActivos = [];
+  List<AlquilerModel> _historialAlquileres = [];
+  List<AlquilerModel> _historialAlquileresFiltrado = [];
   bool _cargando = true;
   String _filtroActivo = 'Todos';
   int? _usuarioId;
@@ -117,8 +123,9 @@ class _ViajesViewState extends State<ViajesView> {
       final viajesActivos = resultados[0] as List<ViajeModel>;
       final rutas = resultados[1] as List<RutaModel>;
       final historial = resultados[2] as List<ViajeModel>;
-
       final viajesHoy = viajesActivos;
+      final alquileres = await _alquilerController.obtenerAlquileresActivos();
+      final historialAlquileres = await _alquilerController.obtenerHistorialAlquileres();
 
       if (!mounted) return;
       setState(() {
@@ -126,7 +133,10 @@ class _ViajesViewState extends State<ViajesView> {
         _viajesHoy = viajesHoy;
         _rutas = rutas;
         _historial = historial;
+        _alquileresActivos = alquileres;
         _historialFiltrado = [];
+        _historialAlquileres = historialAlquileres;
+        _historialAlquileresFiltrado = [];
       });
     } catch (e) {
       if (!mounted) return;
@@ -169,69 +179,204 @@ class _ViajesViewState extends State<ViajesView> {
     }
   }
 
-  Widget _buildListaViajes(List<ViajeModel> viajes, {required String emptyText, bool esHistorial = false}) {
-    if (viajes.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Text(
-          emptyText,
-          style: TextStyle(color: Colors.grey[600]),
+  Future<void> _cambiarEstadoAlquiler(int idAlquiler, String nuevoEstado) async {
+    setState(() => _cargando = true);
+    try {
+      await _conTimeout(
+        _alquilerController.actualizarEstadoAlquiler(idAlquiler, nuevoEstado),
+        'actualizar estado del alquiler',
+      );
+      await _cargarDatos(); 
+      
+      if (mounted) {
+        _mostrarExito('Alquiler actualizado a "$nuevoEstado"');
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarError('Error al actualizar alquiler: $e');
+        setState(() => _cargando = false);
+      }
+    }
+  }
+
+  // Nueva función que dibuja un SOLO viaje (extraída de tu código original)
+  Widget _buildItemViaje(ViajeModel viaje, {bool esHistorial = false}) {
+    Widget widgetEstado = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _colorEstado(viaje.estado).withAlpha(35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        viaje.estado,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: _colorEstado(viaje.estado),
         ),
+      ),
+    );
+
+    if (widget.esAdmin && !esHistorial) {
+      widgetEstado = PopupMenuButton<String>(
+        initialValue: viaje.estado,
+        tooltip: 'Cambiar estado',
+        onSelected: (nuevoEstado) {
+          if (nuevoEstado != viaje.estado) {
+            _cambiarEstadoViaje(viaje.id, nuevoEstado);
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(value: 'Programado', child: Text('Programado')),
+          const PopupMenuItem(value: 'En marcha', child: Text('En marcha')),
+          const PopupMenuItem(value: 'Finalizado', child: Text('Finalizado')),
+        ],
+        child: widgetEstado,
       );
     }
 
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      // --- AQUÍ AÑADIMOS EL BORDE ---
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: const Color.fromARGB(255, 4, 255, 0), // Color del borde (puedes usar tu verde theme si prefieres)
+          width: 1.0, // Grosor del borde
+        ),
+        borderRadius: BorderRadius.circular(12), // Redondeamos las esquinas para que coincida con tu diseño
+      ),
+      child: ListTile(
+        onTap: esHistorial ? () => _abrirDetalleViaje(viaje) : null,
+        title: Text(
+          '${viaje.origenRuta ?? 'Ruta ${viaje.fkRuta}'} ➔ ${viaje.destinoRuta ?? ''}'.trim(),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          'Fecha: ${viaje.fechaSalida}  Hora: ${_formatearHora(viaje.horaSalida)}\nBus: ${viaje.fkBus ?? '-'}',
+        ),
+        trailing: widgetEstado,
+      ),
+    );
+  }
+
+  Widget _buildListaMixta(
+    List<ViajeModel> viajes, 
+    List<AlquilerModel> alquileres, {
+    required String emptyText, 
+    bool esHistorial = false,
+  }) {
+    // 1. Unimos todo en una sola lista dinámica
+    List<dynamic> mezclados = [...viajes, ...alquileres];
+
+    if (mezclados.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(emptyText, style: TextStyle(color: Colors.grey[600])),
+      );
+    }
+
+    // 2. Ordenamos por fecha y hora exactas
+    mezclados.sort((a, b) {
+      DateTime fechaA = DateTime.tryParse('${a.fechaSalida} ${a.horaSalida}') ?? DateTime.now();
+      DateTime fechaB = DateTime.tryParse('${b.fechaSalida} ${b.horaSalida}') ?? DateTime.now();
+      
+      // Si es historial, los más recientes van arriba. Si son activos, los más próximos van arriba.
+      return esHistorial ? fechaB.compareTo(fechaA) : fechaA.compareTo(fechaB);
+    });
+
+    // 3. Dibujamos la columna intercalada
     return Column(
-      children: viajes.map((viaje) {
-        
-        Widget widgetEstado = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _colorEstado(viaje.estado).withAlpha(35),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            viaje.estado,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: _colorEstado(viaje.estado),
-            ),
-          ),
-        );
-
-        if (widget.esAdmin && !esHistorial) {
-          widgetEstado = PopupMenuButton<String>(
-            initialValue: viaje.estado,
-            tooltip: 'Cambiar estado',
-            onSelected: (nuevoEstado) {
-              if (nuevoEstado != viaje.estado) {
-                _cambiarEstadoViaje(viaje.id, nuevoEstado);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'Programado', child: Text('Programado')),
-              const PopupMenuItem(value: 'En marcha', child: Text('En marcha')),
-              const PopupMenuItem(value: 'Finalizado', child: Text('Finalizado')),
-            ],
-            child: widgetEstado,
-          );
+      children: mezclados.map((item) {
+        if (item is AlquilerModel) {
+          return _buildItemAlquiler(item); // Dibuja la tarjeta naranja
+        } else if (item is ViajeModel) {
+          return _buildItemViaje(item, esHistorial: esHistorial); // Dibuja la tarjeta blanca
         }
-
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            onTap: esHistorial ? () => _abrirDetalleViaje(viaje) : null,
-            title: Text(
-              '${viaje.origenRuta ?? 'Ruta ${viaje.fkRuta}'} ➔ ${viaje.destinoRuta ?? ''}'.trim(),
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              'Fecha: ${viaje.fechaSalida}  Hora: ${_formatearHora(viaje.horaSalida)}\nBus: ${viaje.fkBus ?? '-'}',
-            ),
-            trailing: widgetEstado,
-          ),
-        );
+        return const SizedBox.shrink();
       }).toList(),
+    );
+  }
+  Widget _buildItemAlquiler(AlquilerModel alquiler) {
+    Widget widgetEstado = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: _colorEstado(alquiler.estado).withAlpha(35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        alquiler.estado,
+        style: TextStyle(
+          color: _colorEstado(alquiler.estado), 
+          fontSize: 12, 
+          fontWeight: FontWeight.bold
+        ),
+      ),
+    );
+
+    // 2. Si es Admin, envolvemos la pastilla en el menú clickeable
+    if (widget.esAdmin) {
+      widgetEstado = PopupMenuButton<String>(
+        initialValue: alquiler.estado,
+        tooltip: 'Cambiar estado del alquiler',
+        onSelected: (nuevoEstado) {
+          if (nuevoEstado != alquiler.estado) {
+            _cambiarEstadoAlquiler(alquiler.id, nuevoEstado);
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(value: 'Programado', child: Text('Programado')),
+          const PopupMenuItem(value: 'En marcha', child: Text('En marcha')),
+          const PopupMenuItem(value: 'Finalizado', child: Text('Finalizado')),
+        ],
+        child: widgetEstado,
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color.fromARGB(45, 255, 243, 197),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color.fromARGB(255, 249, 165, 38)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${alquiler.origen} ➔ ${alquiler.destino}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+                widgetEstado,
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.person_outline, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text('Cliente: ${alquiler.nombreCliente}', style: TextStyle(color: Colors.grey[700])),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Fecha: ${alquiler.fechaSalida}   Hora: ${alquiler.horaSalida.substring(0, 5)}',
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Precio Acordado: Bs. ${alquiler.precioTotal}',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -289,7 +434,7 @@ class _ViajesViewState extends State<ViajesView> {
     try {
       DateTime ahora = DateTime.now();
       DateTime? fechaInicio;
-      DateTime? fechaFin = ahora; // Casi todos los filtros terminan hoy
+      DateTime? fechaFin = ahora;
 
       switch (filtro) {
         case 'Esta semana':
@@ -300,7 +445,6 @@ class _ViajesViewState extends State<ViajesView> {
           break;
         case 'Mes anterior':
           fechaInicio = DateTime(ahora.year, ahora.month - 1, 1);
-          // El día 0 del mes actual equivale al último día del mes anterior
           fechaFin = DateTime(ahora.year, ahora.month, 0); 
           break;
         case 'Últimos 6 meses':
@@ -313,21 +457,28 @@ class _ViajesViewState extends State<ViajesView> {
           break;
       }
 
-      List<ViajeModel> filtrados = [];
+      List<ViajeModel> viajesFiltrados = [];
+      List<AlquilerModel> alquileresFiltrados = [];
       
       if (fechaInicio == null || fechaFin == null) {
-        // Aprovechamos la función normal si eligió "Todos"
-        filtrados = await _viajeController.obtenerHistorialViajes(); 
+        // Aprovechamos para traer todo si eligio todos
+        viajesFiltrados = await _viajeController.obtenerHistorialViajes(); 
+        alquileresFiltrados = await _alquilerController.obtenerHistorialAlquileres();
       } else {
-        // Formateamos las fechas (YYYY-MM-DD) para Postgres
+        // Formateamos las fechas (YYYY-MM-DD)
         final inicioStr = fechaInicio.toIso8601String().split('T').first;
         final finStr = fechaFin.toIso8601String().split('T').first;
         
-        filtrados = await _viajeController.obtenerHistorialPorRango(inicioStr, finStr);
+        // ¡Magia! Traemos ambos filtrados
+        viajesFiltrados = await _viajeController.obtenerHistorialPorRango(inicioStr, finStr);
+        alquileresFiltrados = await _alquilerController.obtenerHistorialAlquileresPorRango(inicioStr, finStr);
       }
 
       if (!mounted) return;
-      setState(() => _historialFiltrado = filtrados);
+      setState(() {
+        _historialFiltrado = viajesFiltrados;
+        _historialAlquileresFiltrado = alquileresFiltrados; // Guardamos el nuevo filtro
+      });
       
     } catch (e) {
       if (!mounted) return;
@@ -487,8 +638,163 @@ class _ViajesViewState extends State<ViajesView> {
       ),
     );
   }
+  //alquiler del Bus
+  Future<void> _mostrarDialogoCrearAlquiler() async {
+    DateTime fecha = DateTime.now();
+    TimeOfDay hora = TimeOfDay.now();
+    
+    // Controladores
+    final clienteCtrl = TextEditingController();
+    final telefonoCtrl = TextEditingController();
+    final origenCtrl = TextEditingController();
+    final destinoCtrl = TextEditingController();
+    final precioCtrl = TextEditingController();
+    final busCtrl = TextEditingController(text: '1'); 
 
-  @override
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Registrar Alquiler Privado', style: TextStyle(color: Colors.orange)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: clienteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del Cliente / Institución',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                TextField(
+                  controller: telefonoCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono de contacto',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: origenCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Origen exacto', 
+                    prefixIcon: Icon(Icons.location_on_outlined, color: Colors.green),
+                  ),
+                ),
+                TextField(
+                  controller: destinoCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Destino exacto', 
+                    prefixIcon: Icon(Icons.flag_outlined, color: Colors.red),
+                  ),
+                ),
+                TextField(
+                  controller: precioCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Precio Total Acordado', 
+                    prefixText: 'Bs ',
+                    prefixIcon: Icon(Icons.monetization_on_outlined, color: Colors.orange),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.calendar_today_outlined),
+                  title: Text('Fecha: ${fecha.toIso8601String().split('T').first}'),
+                  onTap: () async {
+                    final seleccion = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: fecha,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (seleccion != null) setDialogState(() => fecha = seleccion);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.access_time_outlined),
+                  title: Text('Hora: ${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}'),
+                  onTap: () async {
+                    final seleccion = await showTimePicker(context: dialogContext, initialTime: hora);
+                    if (seleccion != null) setDialogState(() => hora = seleccion);
+                  },
+                ),
+                // --- CAMPO DEL BUS VISIBLE PERO BLOQUEADO ---
+                const SizedBox(height: 8),
+                TextField(
+                  controller: busCtrl,
+                  readOnly: true, // <-- ESTO EVITA QUE EL TECLADO APAREZCA
+                  decoration: InputDecoration(
+                    labelText: 'ID Bus',
+                    prefixIcon: const Icon(Icons.directions_bus_outlined),
+                    filled: true,
+                    fillColor: Colors.grey[200], // Fondo gris claro
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+  onPressed: () async {
+    final cliente = clienteCtrl.text.trim();
+    final origen = origenCtrl.text.trim();
+    final destino = destinoCtrl.text.trim();
+    final precio = double.tryParse(precioCtrl.text) ?? 0.0;
+    
+    // Validaciones básicas
+    if (cliente.isEmpty || origen.isEmpty || destino.isEmpty || precio <= 0) {
+      _mostrarError('Por favor completa todos los campos.');
+      return;
+    }
+
+    final adminId = _usuarioId ?? await _resolverAdminIdActual();
+    if (!context.mounted) return;
+    if (adminId == null) return;
+
+    Navigator.pop(dialogContext); // Cerramos el modal
+    setState(() => _cargando = true);
+
+    try {
+      await _alquilerController.crearAlquiler(
+        idAdmin: adminId,
+        cliente: cliente,
+        telefono: telefonoCtrl.text.trim(),
+        origen: origen,
+        destino: destino,
+        fecha: fecha.toIso8601String().split('T').first,
+        hora: '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}:00',
+        precio: precio,
+      );
+      
+      await _cargarDatos(); // Refrescamos la lista
+      _mostrarExito('Alquiler registrado con éxito.');
+    } catch (e) {
+      _mostrarError(e.toString());
+      setState(() => _cargando = false);
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.orange[600],
+    foregroundColor: Colors.white,
+  ),
+  child: const Text('REGISTRAR ALQUILER'),
+),
+          ],
+        ),
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -508,13 +814,15 @@ class _ViajesViewState extends State<ViajesView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'VIAJES ACTIVOS (PROGRAMADOS Y EN MARCHA)',
+                      'VIAJES y ALQUILERES DEL BUS ACTIVOS (PROGRAMADOS Y EN MARCHA)',
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                     ),
                     const SizedBox(height: 8),
-                    _buildListaViajes(
+                    _buildListaMixta(
                       _viajesHoy,
-                      emptyText: 'No hay viajes programados para partir.',
+                      _alquileresActivos,
+                      emptyText: 'No hay viajes ni alquileres programados para partir.',
+                      esHistorial: false,
                     ),
                     if (widget.esAdmin) ...[
                       const SizedBox(height: 20),
@@ -562,8 +870,11 @@ class _ViajesViewState extends State<ViajesView> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        _buildListaViajes(
+                        
+                        // 1. Mostramos los ALQUILERES filtrados primero
+                        _buildListaMixta(
                           _historialFiltrado,
+                          _historialAlquileresFiltrado,
                           emptyText: 'No hay viajes en $_filtroActivo.',
                           esHistorial: true,
                         ),
@@ -571,8 +882,11 @@ class _ViajesViewState extends State<ViajesView> {
                       ] else ...[
                         // --- SI EL FILTRO ES "TODOS", MOSTRAMOS LA LISTA COMPLETA ---
                         const SizedBox(height: 8),
-                        _buildListaViajes(
-                          _historial, // Pasamos la variable que tiene todo el historial
+                        
+                        // 1. Historial completo de ALQUILERES
+                        _buildListaMixta(
+                          _historial,
+                          _historialAlquileres,
                           emptyText: 'No hay viajes finalizados en el historial.',
                           esHistorial: true,
                         ),
@@ -584,12 +898,32 @@ class _ViajesViewState extends State<ViajesView> {
               ),
             ),
       floatingActionButton: widget.esAdmin
-          ? FloatingActionButton.extended(
-              onPressed: _mostrarDialogoCrearViaje,
-              backgroundColor: const Color(0xFF638541),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('Nuevo viaje'),
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // BOTON DE NUEVO ALQUILER (Arriba)
+                FloatingActionButton.extended(
+                  heroTag: 'btn_nuevo_alquiler', 
+                  onPressed: _mostrarDialogoCrearAlquiler, 
+                  backgroundColor: Colors.orange[600], 
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.directions_bus_filled),
+                  label: const Text('Nuevo alquiler'),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                //BOTON DE NUEVO VIAJE (Abajo)
+                FloatingActionButton.extended(
+                  heroTag: 'btn_nuevo_viaje',
+                  onPressed: _mostrarDialogoCrearViaje,
+                  backgroundColor: const Color(0xFF638541),
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo viaje'),
+                ),
+              ],
             )
           : null,
     );
