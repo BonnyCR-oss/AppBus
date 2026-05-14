@@ -17,7 +17,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
   final TextEditingController _apellidosCtrl = TextEditingController();
   final TextEditingController _ciCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
-  
+  final TextEditingController _contactoCtrl = TextEditingController();
   String _rolSeleccionado = 'Vendedor';
   bool _estaActivo = true;
   bool get esEdicion => widget.usuarioActual != null;
@@ -29,6 +29,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
     final nombres = _nombresCtrl.text.trim();
     final apellidos = _apellidosCtrl.text.trim();
     final ci = _ciCtrl.text.trim();
+    final contacto = _contactoCtrl.text.trim();
     final email = _emailCtrl.text.trim();
 
     if (nombres.isEmpty ||
@@ -51,6 +52,10 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
     if (!regexCi.hasMatch(ci)) {
       return 'El CI debe contener solo numeros (entre 6 y 14 digitos).';
     }
+    final regexContacto = RegExp(r'^[0-9]{8,8}$');
+    if (!regexContacto.hasMatch(contacto)){
+      return 'El numero de celular debe tener 8 numeros. ';
+    }
 
     final regexEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!regexEmail.hasMatch(email)) {
@@ -72,6 +77,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
       _nombresCtrl.text = user.nombres;
       _apellidosCtrl.text = user.apellidos;
       _ciCtrl.text = user.ci;
+      _contactoCtrl.text = user.contacto;
       _emailCtrl.text = user.email;
       _estaActivo = user.estaActivo; 
       
@@ -89,6 +95,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
     _nombresCtrl.dispose();
     _apellidosCtrl.dispose();
     _ciCtrl.dispose();
+    _contactoCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
   }
@@ -131,6 +138,7 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
         nombres: _nombresCtrl.text.trim(),
         apellidos: _apellidosCtrl.text.trim(),
         ci: _ciCtrl.text.trim(),
+        contacto: _contactoCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
         rolSeleccionado: _rolSeleccionado,
         estaActivo: _estaActivo,
@@ -204,6 +212,17 @@ class _UsuarioFormViewState extends State<UsuarioFormView> {
                 FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z ]')),
               ],
               decoration: _inputDecoration('Apellidos'),
+            ),
+            const SizedBox(height: 16),
+      
+            TextField(
+              controller: _contactoCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(14),
+              ],
+              decoration: _inputDecoration('telefono'),
             ),
             const SizedBox(height: 16),
             Row(

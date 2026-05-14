@@ -3,6 +3,7 @@ class UsuarioModel {
   final String nombres;
   final String apellidos;
   final String ci;
+  final String contacto;
   final String email;
   final String password;
   final int fkRol;
@@ -14,6 +15,7 @@ class UsuarioModel {
     required this.nombres,
     required this.apellidos,
     required this.ci,
+    required this.contacto,
     required this.email,
     required this.password,
     required this.fkRol,
@@ -27,6 +29,7 @@ class UsuarioModel {
       nombres: (map['nombres'] ?? '').toString().trim(),
       apellidos: (map['apellidos'] ?? '').toString().trim(),
       ci: (map['ci'] ?? '').toString().trim(),
+      contacto: (map['contacto'] ?? '').toString().trim(),
       email: (map['email'] ?? '').toString().trim(),
       password: (map['password'] ?? '').toString(),
       fkRol: (map['fk_rol'] as num?)?.toInt() ?? 0,

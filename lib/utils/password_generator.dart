@@ -10,7 +10,7 @@ class PasswordGenerator {
   static String generarContraseniaDesdeDatos({
     required String ci,
     required String nombres,
-    required String apellidos,
+    required String apellidos, 
   }) {
     final ciLimpio = ci.replaceAll(RegExp(r'[^0-9A-Za-z]'), '');
     final nombreLimpio = _soloLetrasNumeros(nombres);
