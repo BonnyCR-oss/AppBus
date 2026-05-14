@@ -13,6 +13,7 @@ import 'usuarios_list_view.dart';
 class MainShell extends StatefulWidget {
   final String nombreUsuario;
   final String contactoUsuario;
+  final String telefonoUsuario;
   final int rolUsuarioId;
   final int rolDuenoId;
 
@@ -20,6 +21,7 @@ class MainShell extends StatefulWidget {
     super.key,
     required this.nombreUsuario,
     required this.contactoUsuario,
+    required this.telefonoUsuario,
     required this.rolUsuarioId,
     required this.rolDuenoId,
   });
@@ -134,7 +136,7 @@ class _MainShellState extends State<MainShell> {
                 style: TextStyle(color: Colors.grey[600], fontSize: 14),
               ),
               const Divider(height: 32),
-              _buildDialogInfoRow(Icons.phone, 'Contacto', widget.contactoUsuario),
+              _buildDialogInfoRow(Icons.phone, 'Contacto', widget.telefonoUsuario),
               _buildDialogInfoRow(
                   Icons.email_outlined, 'Email', widget.contactoUsuario),
               _buildDialogInfoRow(

@@ -56,6 +56,7 @@ class _SplashViewState extends State<SplashView>
         MaterialPageRoute(
           builder: (_) => MainShell(
             nombreUsuario: sesion.nombreUsuario,
+            telefonoUsuario: sesion.telefonoUsuario,
             contactoUsuario: sesion.contactoUsuario,
             rolUsuarioId: sesion.rolUsuarioId,
             rolDuenoId: LoginController.rolDuenoId,

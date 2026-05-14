@@ -369,6 +369,7 @@ class _LoginViewState extends State<LoginView> {
       await _sessionService.guardarSesion(
         nombreUsuario: usuario.nombreCompleto,
         contactoUsuario: usuario.email,
+        telefonoUsuario: usuario.contacto,
         rolUsuarioId: usuario.fkRol,
         usuarioId: usuario.id,
       );
@@ -380,6 +381,7 @@ class _LoginViewState extends State<LoginView> {
         MaterialPageRoute(
           builder: (_) => MainShell(
             nombreUsuario: usuario.nombreCompleto,
+            telefonoUsuario: usuario.contacto,
             contactoUsuario: usuario.email,
             rolUsuarioId: usuario.fkRol,
             rolDuenoId: LoginController.rolDuenoId,

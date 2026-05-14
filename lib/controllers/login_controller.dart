@@ -10,7 +10,7 @@ class LoginController {
   Future<UsuarioModel?> buscarUsuarioPorEmail(String email) async {
     final data = await _supabase
         .from('usuarios')
-        .select('id, nombres, apellidos, ci, email, password, fk_rol, estado')//agregue estado
+        .select('id, nombres, apellidos, ci, contacto, email, password, fk_rol, estado')//agregue estado
         .ilike('email', email)
         .maybeSingle();
 
