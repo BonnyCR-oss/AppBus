@@ -205,8 +205,7 @@ class _MainShellState extends State<MainShell> {
               child: CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.white24,
-                child: Icon(Icons.directions_bus,
-                    color: Colors.white, size: 28),
+                backgroundImage: AssetImage('assets/images/icono.png'),
               ),
             ),
             const SizedBox(width: 16),
