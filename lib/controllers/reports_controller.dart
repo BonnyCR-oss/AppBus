@@ -246,7 +246,12 @@ class ReportsController {
       }
 
       // Ordenar por fecha (descendente)
-      viajes.sort((a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String));
+      viajes.sort((a, b) { 
+        final String fechaCompletaA = '${a['fecha']} ${a['hora']}';
+        final String fechaCompletaB = '${b['fecha']} ${b['hora']}';
+
+        return fechaCompletaB.compareTo(fechaCompletaA); 
+      });
 
       return viajes.cast<Map<String, dynamic>>();
     } catch (e) {
