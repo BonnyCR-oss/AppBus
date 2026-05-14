@@ -356,7 +356,7 @@ class _ViajesViewState extends State<ViajesView> {
                 widgetEstado,
               ],
             ),
-            const SizedBox(height: 8),
+           const SizedBox(height: 5),
             Row(
               children: [
                 Icon(Icons.person_outline, size: 16, color: Colors.grey[600]),
@@ -364,12 +364,17 @@ class _ViajesViewState extends State<ViajesView> {
                 Text('Cliente: ${alquiler.nombreCliente}', style: TextStyle(color: Colors.grey[700])),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
+            Text(
+              'contacto: ${alquiler.telefonoCliente}',
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 2),
             Text(
               'Fecha: ${alquiler.fechaSalida}   Hora: ${alquiler.horaSalida.substring(0, 5)}',
               style: TextStyle(color: Colors.grey[700]),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               'Precio : Bs. ${alquiler.precioTotal}',
               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
