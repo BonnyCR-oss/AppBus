@@ -44,6 +44,7 @@ class BoletoController {
     required int? vendedorId,
     required String origen,
     required String destino,
+    String estado = 'vendido', // <-- NUEVO PARÁMETRO CON VALOR POR DEFECTO
   }) async {
     if (asientos.isEmpty) {
       throw 'Debes seleccionar al menos un asiento.';
@@ -67,12 +68,45 @@ class BoletoController {
             'fecha_venta': fechaVenta,
             'origen': origen,
             'destino': destino,
-            'estado': 'vendido',
+            'estado': estado,
           },
         )
         .toList();
 
     await _supabase.from('boletos').insert(boletos);
+  }
+
+  // --- NUEVAS FUNCIONES PARA RESERVAS ---
+
+  /// Elimina una reserva para que el asiento vuelva a estar disponible
+  Future<void> liberarReserva(int viajeId, int asientoId) async {
+    try {
+      await _supabase
+          .from('boletos')
+          .delete()
+          .eq('fk_viaje', viajeId)
+          .eq('fk_asiento', asientoId)
+          .eq('estado', 'reservado'); // Filtro extra de seguridad
+    } catch (e) {
+      throw 'Error al liberar la reserva: $e';
+    }
+  }
+
+  /// Cambia el estado de una reserva a 'vendido'
+  Future<void> confirmarReserva(int viajeId, int asientoId) async {
+    try {
+      await _supabase
+          .from('boletos')
+          .update({
+            'estado': 'vendido', 
+            'fecha_venta': DateTime.now().toIso8601String() // Actualizamos la fecha a HOY para los reportes
+          }) 
+          .eq('fk_viaje', viajeId)
+          .eq('fk_asiento', asientoId)
+          .eq('estado', 'reservado');
+    } catch (e) {
+      throw 'Error al confirmar la reserva: $e';
+    }
   }
 
   Future<double> obtenerTotalRecaudadoPorViaje(int viajeId) async {

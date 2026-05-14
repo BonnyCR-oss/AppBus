@@ -343,11 +343,9 @@ class _VentaViewState extends State<VentaView> {
         }
       }
 
-      if (_detalleBoletoPorAsiento.length != detalleBoletos.length) {
         setState(() {
           _detalleBoletoPorAsiento = detalleBoletos;
         });
-      }
 
       // Si algún asiento fue vendido, mostrar advertencia
       if (asientosAhoraVendidos.isNotEmpty) {
@@ -400,13 +398,19 @@ class _VentaViewState extends State<VentaView> {
   }
 
   Color _colorAsiento(AsientoModel asiento) {
-    // Primero verificar si está vendido (rojo)
-    final tieneBoletoEnViaje = _detalleBoletoPorAsiento.containsKey(asiento.id);
-    if (tieneBoletoEnViaje) return Colors.red;
-
-    // Luego verificar si está bloqueado por otro vendedor (amarillo/naranja)
-    final estaBloqueado = _asientosBloqueados.contains(asiento.id);
-    if (estaBloqueado) return Colors.amber;
+    final detalleBoleto = _detalleBoletoPorAsiento[asiento.id];
+    
+    if (detalleBoleto != null) {
+      // Extraemos el estado para saber de qué color pintarlo
+      final estadoBoleto = detalleBoleto['estado']?.toString().toLowerCase();
+      
+      // Si es reserva, lo pintamos de morado (puedes cambiar el color si gustas)
+      if (estadoBoleto == 'reservado') {
+        return Colors.purple; 
+      }
+      // Si es una venta normal, va en rojo
+      return Colors.red; 
+    }
 
     // Luego verificar estado (gris si inactivo/mantenimiento)
     final estado = asiento.estado.toLowerCase();
@@ -644,6 +648,45 @@ class _VentaViewState extends State<VentaView> {
             ),
           ),
           actions: [
+            // --- BOTONES EXCLUSIVOS PARA RESERVAS ---
+            if (estado.toLowerCase() == 'reservado') ...[
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Cierra el modal primero
+                  try {
+                    await _conTimeout(
+                      _boletoController.liberarReserva(_viajeSeleccionado!.id, asiento.id),
+                      'liberar reserva'
+                    );
+                    _mostrarExito('Reserva liberada. El asiento vuelve a estar disponible.');
+                    _actualizarAsientosDisponibes(); // Recargamos el mapa
+                  } catch (e) {
+                    _mostrarError(e.toString());
+                  }
+                },
+                child: const Text('Liberar Reserva', style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Cierra el modal
+                  try {
+                    await _conTimeout(
+                      _boletoController.confirmarReserva(_viajeSeleccionado!.id, asiento.id),
+                      'confirmar reserva'
+                    );
+                    _mostrarExito('Venta confirmada exitosamente.');
+                    _actualizarAsientosDisponibes(); // Recargamos el mapa
+                  } catch (e) {
+                    _mostrarError(e.toString());
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF638541)),
+                child: const Text('Confirmar Venta', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+            // ------------------------------------------
+
+            // Botón normal de cerrar (siempre visible)
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cerrar'),
@@ -660,6 +703,7 @@ class _VentaViewState extends State<VentaView> {
     required String origen,  
     required String destino,  
     required double precio,
+    String estadoFinal = 'vendido',
   }) async {
     if (_viajeSeleccionado == null || _viajeSeleccionado!.fkBus == null) {
       throw 'Debes seleccionar un viaje válido.';
@@ -684,7 +728,8 @@ class _VentaViewState extends State<VentaView> {
       precioUnitario: precio,
       vendedorId: sesion?.usuarioId,
       origen: origen,
-      destino: destino,     
+      destino: destino,
+      estado: estadoFinal, 
     ),
       'registrar venta',
     );
@@ -806,6 +851,66 @@ class _VentaViewState extends State<VentaView> {
             final precioValido = _esPrecioValido(precioCtrl.text.trim());
             final todosValidos = nombreValido && ciValido && precioValido;
 
+            // --- 1. PEGA ESTA NUEVA FUNCIÓN AQUÍ ---
+            Future<void> procesarAccionVenta(String estadoFinal) async {
+              final navigator = Navigator.of(contextoModal);
+              final nombre = nombreCtrl.text.trim();
+              final ci = ciCtrl.text.trim();
+              final precioFinal = double.tryParse(precioCtrl.text) ?? 0.0;
+              var operacionExitosa = false;
+
+              setModalState(() => guardando = true);
+              try {
+                // Verificar que siguen disponibles
+                final detalleBoletos = await _conTimeout(
+                  _boletoController.obtenerDetalleBoletosPorViaje(_viajeSeleccionado!.id),
+                  'verificar disponibilidad',
+                );
+                
+                final asientosNoDisponibles = <int>[];
+                for (final asientoId in _asientosSeleccionadosIds) {
+                  if (detalleBoletos.containsKey(asientoId)) {
+                    asientosNoDisponibles.add(asientoId);
+                  }
+                }
+
+                if (asientosNoDisponibles.isNotEmpty) {
+                  setModalState(() => guardando = false);
+                  final asientosText = asientosNoDisponibles.join(', ');
+                  _mostrarAdvertencia('Asiento(s) $asientosText ya no están disponibles.');
+                  return;
+                }
+
+                // Llamar al registro con el estado correspondiente
+                await _registrarVenta(
+                  nombreComprador: nombre,
+                  ciComprador: ci,
+                  origen: origenSeleccionado,
+                  destino: destinoSeleccionado,
+                  precio: precioFinal,
+                  estadoFinal: estadoFinal, // <-- Aquí le pasamos 'vendido' o 'reservado'
+                );
+                
+                if (!mounted) return;
+                operacionExitosa = true;
+                navigator.pop();
+                
+                // Mensaje dinámico
+                final msg = estadoFinal == 'reservado' 
+                    ? 'Reserva registrada correctamente.' 
+                    : 'Venta registrada correctamente.';
+                _mostrarExito(msg);
+                
+              } catch (e) {
+                if (contextoModal.mounted) setModalState(() => guardando = false);
+                _mostrarError('Error: ${e.toString()}');
+              } finally {
+                if (!operacionExitosa && contextoModal.mounted) {
+                  setModalState(() => guardando = false);
+                }
+              }
+            }
+
             return AlertDialog(
               title: const Text('Registrar venta'),
               content: SingleChildScrollView(
@@ -901,6 +1006,13 @@ class _VentaViewState extends State<VentaView> {
                   onPressed: guardando ? null : () => Navigator.of(contextoModal).pop(),
                   child: const Text('Cancelar'),
                 ),
+
+                // Botón de Reserva
+                OutlinedButton(
+                  onPressed: (guardando || !todosValidos) ? null : () => procesarAccionVenta('reservado'),
+                  child: const Text('Solo Reservar'),
+                ),
+
                 ElevatedButton(
                   onPressed: (guardando || !todosValidos) ? null : () async {
                     final navigator = Navigator.of(contextoModal);
@@ -1044,9 +1156,11 @@ class _VentaViewState extends State<VentaView> {
           children: const [
             _LegendItem(color: Color(0xFF638541), texto: 'Disponible'),
             _LegendItem(color: Colors.red, texto: 'Vendido'),
-            _LegendItem(color: Colors.amber, texto: 'Reservado'),
+            _LegendItem(color: Colors.amber, texto: 'Vendiendo'),
+            _LegendItem(color: Colors.purple, texto: 'Reservado'),
             _LegendItem(color: Colors.grey, texto: 'Inactivo'),
             _LegendItem(color: Colors.blue, texto: 'Seleccionado'),
+            
           ],
         ),
         const SizedBox(height: 16),
