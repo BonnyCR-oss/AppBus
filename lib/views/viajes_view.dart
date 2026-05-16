@@ -890,7 +890,7 @@ class _ViajesViewState extends State<ViajesView> {
                         _buildListaMixta(
                           _historial,
                           _historialAlquileres,
-                          emptyText: 'No hay viajes finalizados en el historial.',
+                          emptyText: 'No hay viajes/alquileres finalizados en el historial.',
                           esHistorial: true,
                         ),
                       ],
