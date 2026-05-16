@@ -446,22 +446,34 @@ class _VentaViewState extends State<VentaView> {
   }
 
   int _cantidadVendidos() {
-    return _detalleBoletoPorAsiento.length;
+    int count = 0;
+    // Contamos solo los que NO dicen 'reservado'
+    for (final detalle in _detalleBoletoPorAsiento.values) {
+      if (detalle['estado']?.toString().toLowerCase() != 'reservado') count++;
+    }
+    return count;
   }
 
   int _cantidadReservados() {
+    int count = 0;
+    // Contamos EXCLUSIVAMENTE los que dicen 'reservado' (Los morados)
+    for (final detalle in _detalleBoletoPorAsiento.values) {
+      if (detalle['estado']?.toString().toLowerCase() == 'reservado') count++;
+    }
+    return count;
+  }
+
+  int _cantidadBloqueados() {
+    // Estos son los amarillos (los que otros están "Vendiendo" ahora mismo)
     return _asientosBloqueados.length;
   }
 
   int _cantidadInactivos() {
-    return _asientos
-        .where((a) => _asientoBloqueadoPorEstado(a))
-        .length;
+    return _asientos.where((a) => _asientoBloqueadoPorEstado(a)).length;
   }
 
   int _cantidadDisponibles() {
-    final noDisponibles =
-        _cantidadVendidos() + _cantidadReservados() + _cantidadInactivos();
+    final noDisponibles = _cantidadVendidos() + _cantidadReservados() + _cantidadBloqueados() + _cantidadInactivos();
     final disponibles = _asientos.length - noDisponibles;
     return disponibles < 0 ? 0 : disponibles;
   }
@@ -1144,7 +1156,8 @@ class _VentaViewState extends State<VentaView> {
           children: [
             _buildResumenChip('Disponibles', _cantidadDisponibles(), const Color(0xFF638541)),
             _buildResumenChip('Vendidos', _cantidadVendidos(), Colors.red),
-            _buildResumenChip('Reservados', _cantidadReservados(), Colors.amber),
+            _buildResumenChip('Reservados', _cantidadReservados(), Colors.purple), // <-- ¡El nuevo contador morado!
+            _buildResumenChip('Vendiendo', _cantidadBloqueados(), Colors.amber),   // <-- El antiguo amarillo
             _buildResumenChip('Inactivos', _cantidadInactivos(), Colors.grey),
           ],
         ),
