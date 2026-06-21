@@ -1192,19 +1192,28 @@ class _VentaViewState extends State<VentaView> {
                   children: [
                     // Layout de 5 columnas: 2 izq | pasillo | 2 der
                     ...filas.map((fila) {
-                      final asientosEnFila = porFila[fila]!..sort((a, b) => a.numero.compareTo(b.numero));
+                      // Obtenemos los asientos de esta fila (ya no importa cómo estén ordenados en la lista)
+                      final asientosEnFila = porFila[fila]!;
+
+                      // Buscamos exactamente qué asiento le toca a cada columna usando nuestra nueva variable
+                      final asIz1 = asientosEnFila.where((a) => a.columnaFisica == 0).firstOrNull;
+                      final asIz2 = asientosEnFila.where((a) => a.columnaFisica == 1).firstOrNull;
+                      final asDe1 = asientosEnFila.where((a) => a.columnaFisica == 3).firstOrNull;
+                      final asDe2 = asientosEnFila.where((a) => a.columnaFisica == 4).firstOrNull;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Columna 0: Asiento izquierda 1
-                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.isNotEmpty ? asientosEnFila[0] : null)),
+                            // Columna 0: Asiento izquierda 1 (Ventana Izquierda)
+                            SizedBox(width: 38, child: _buildAsientoWidget(asIz1)),
                             const SizedBox(width: 6),
-                            // Columna 1: Asiento izquierda 2
-                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 1 ? asientosEnFila[1] : null)),
+                            
+                            // Columna 1: Asiento izquierda 2 (Pasillo Izquierdo)
+                            SizedBox(width: 38, child: _buildAsientoWidget(asIz2)),
                             const SizedBox(width: 16),
+                            
                             // Columna 2: PASILLO
                             SizedBox(
                               width: 30,
@@ -1218,11 +1227,13 @@ class _VentaViewState extends State<VentaView> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            // Columna 3: Asiento derecha 1
-                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 3 ? asientosEnFila[3] : null)),
+                            
+                            // Columna 3: Asiento derecha 1 (Pasillo Derecho)
+                            SizedBox(width: 38, child: _buildAsientoWidget(asDe1)),
                             const SizedBox(width: 6),
-                            // Columna 4: Asiento derecha 2
-                            SizedBox(width: 38, child: _buildAsientoWidget(asientosEnFila.length > 2 ? asientosEnFila[2] : null)),
+                            
+                            // Columna 4: Asiento derecha 2 (Ventana Derecha)
+                            SizedBox(width: 38, child: _buildAsientoWidget(asDe2)),
                           ],
                         ),
                       );

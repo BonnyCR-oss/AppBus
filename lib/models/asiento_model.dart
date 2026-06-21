@@ -37,21 +37,31 @@ class AsientoModel {
   // Calcula fila con salto de puerta entre 10 y 11.
   // 1-4 -> fila 0, 5-8 -> fila 1, 9-10 -> fila 2,
   // 11-14 -> fila 3, 15-18 -> fila 4, etc.
+  // Reemplaza todo desde aquí hasta el final de tu clase
+  
   int get fila {
-    if (numero <= 10) {
+    // LADO IZQUIERDO (1,2 - 5,6 - 9,10 - 13,14...)
+    // Siguen un patrón continuo sin verse afectados por la puerta
+    if (numero % 4 == 1 || numero % 4 == 2) {
       return (numero - 1) ~/ 4;
+    } 
+    // LADO DERECHO (4,3 - 8,7 - [PUERTA] - 12,11 - 16,15...)
+    else {
+      if (numero <= 8) {
+        return (numero - 1) ~/ 4; // Filas 0 y 1
+      } else {
+        return ((numero - 1) ~/ 4) + 1; // A partir del 11, bajan una fila por la puerta
+      }
     }
-    return ((numero - 11) ~/ 4) + 3;
   }
 
-  // Calcula posición en la fila para layout de 5 columnas:
-  // Columnas: 0(asiento izq 1), 1(asiento izq 2), 2(pasillo), 3(asiento der 1), 4(asiento der 2)
-  int get posicionFila {
-    final posEnGrupo = (numero - 1) % 4;
-    return posEnGrupo < 2 ? posEnGrupo : posEnGrupo + 1; // Salta columna 2 (pasillo)
+  // Nueva propiedad infalible para ubicar cada asiento en su columna real
+  int get columnaFisica {
+    final mod = numero % 4;
+    if (mod == 1) return 0; // Ventana Izquierda (1, 5, 9, 13...)
+    if (mod == 2) return 1; // Pasillo Izquierdo (2, 6, 10, 14...)
+    if (mod == 0) return 3; // Pasillo Derecho (4, 8, 12, 16...)
+    if (mod == 3) return 4; // Ventana Derecha (3, 7, 11, 15...)
+    return -1;
   }
-
-  // Determina si es lado izquierdo o derecho
-  bool get esLadoIzquierdo => (numero - 1) % 4 < 2;
-  bool get esLadoDerecho => (numero - 1) % 4 >= 2;
-}
+} // Fin de la clase AsientoModel
